@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:suki-kira.com)",
+      "Bash(python scripts/analyze_ranking.py:*)",
+      "Bash(python -c \":*)",
+      "Bash(python scripts/analyze_search.py:*)",
+      "Bash(python scripts/analyze_comment_struct.py:*)",
+      "Bash(python scripts/analyze_rating.py:*)",
+      "Bash(python scripts/analyze_rating2.py:*)",
+      "Bash(python:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(cat:*)"
+    ]
+  }
+}

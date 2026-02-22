@@ -1,0 +1,19 @@
+# ランキング件数・専用ページの確認
+python scripts/analyze_ranking.py
+# → scripts/out/analyze_ranking.txt に保存
+
+# トップページ・検索・投票フォームの構造解析
+python scripts/analyze_html.py
+# → scripts/out/analyze_html.txt に保存
+
+# result ページ（コメント・割合）の詳細解析
+python scripts/analyze_result.py
+# → scripts/out/analyze_result.txt に保存
+
+# 実際に投票POSTしてレスポンスを解析（※実際に投票が送信されます）
+python scripts/analyze_vote_post.py
+# → scripts/out/analyze_vote_post.txt に保存
+
+# コメントdivの正確なHTML構造を確認（※実際に投票が送信されます）
+python scripts/analyze_comment_struct.py
+# → scripts/out/analyze_comment_struct.txt に保存
