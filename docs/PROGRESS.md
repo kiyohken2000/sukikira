@@ -76,42 +76,35 @@
 
 ## フェーズ4.5: アプリ機能拡充
 
-- [ ] 閲覧・投票・コメント履歴タブ追加
-- [ ] ブックマーク機能（フォルダ形式カテゴリ管理）
-- [ ] 投票済みバッジ（ランキング・検索画面）
-- [ ] スレ内検索機能（コメント一覧内キーワード検索）
-- [ ] 自分のコメント追跡（レス確認・good/bad 反応確認）
-- [ ] スワイプ投票モード
-- [ ] Supabase リモートパース設定
+- [x] 閲覧・投票・コメント履歴タブ追加
+- [x] ブックマーク機能（フォルダ形式カテゴリ管理）
+- [x] 投票済みバッジ（ランキング・検索画面）
+- [x] スレ内検索機能（コメント一覧内キーワード検索）
+- [x] 自分のコメント追跡（レス確認・good/bad 反応確認）
+- [x] スワイプ投票モード
+- [見送り] Supabase リモートパース設定
 
 ---
 
 ## フェーズ5: ランディングページ（Cloudflare Pages）
 
-- [ ] Viteプロジェクトセットアップ
-- [ ] トップページデザイン・実装
-- [ ] `/privacy-policy` ページ実装
-- [ ] Cloudflare Pagesへのデプロイ設定（wrangler.toml）
-
-### プライバシーポリシーの記載内容
-- [ ] 収集する情報（なし）
-- [ ] ローカルストレージの利用
-- [ ] 第三者サービス（好き嫌い.com）へのアクセス
-- [ ] 連絡先
+- [x] Viteプロジェクトセットアップ（`apps/web/`）
+- [x] トップページデザイン・実装（ヒーロー・機能カード6枚）
+- [x] `/privacy.html` プライバシーポリシーページ実装
+- [x] Cloudflare Pagesへのデプロイ → https://sukikira.pages.dev
+- [x] faviconをアプリアイコンから生成（sharp）
 
 ---
 
 ## フェーズ6: リリース準備
 
-- [ ] アプリアイコン作成
+- [x] アプリアイコン作成（Adobe Firefly / `assets/images/logo-lg.png`）
 - [ ] スプラッシュスクリーン作成
-- [ ] App Store向けスクリーンショット作成
-- [ ] App Store説明文作成
-- [ ] Google Play説明文作成
-- [ ] EAS Buildでビルド
-- [ ] TestFlightでテスト（iOS）
-- [ ] App Store申請
-- [ ] Google Play申請
+- [x] App Store向けスクリーンショット作成
+- [x] App Store / Google Play 説明文作成（`docs/STORE_METADATA.md`）
+- [x] EAS Buildでビルド
+- [x] App Store申請（審査中）
+- [x] Google Play申請（審査中）
 
 ---
 
@@ -133,3 +126,6 @@
 | 2026/02/22 | Supabase・expo-notifications・Pages Functionsは使わないことに決定 |
 | 2026/02/22 | Cloudflare Pagesはランディングページとプライバシーポリシーのみのホスティングに決定 |
 | 2026/02/22 | 好き嫌い.comへのリクエスト処理はlib/sukikira.tsに全て集約することに決定 |
+| 2026/02/23 | App Store・Google Play 両ストアに申請（審査中） |
+| 2026/02/23 | サブタイトルを「好き嫌い.com 非公式ブラウザ」→「for 好き嫌い.com」に変更 |
+| 2026/02/23 | SafeAreaView を react-native-safe-area-context に統一（Android ステータスバー被り修正） |

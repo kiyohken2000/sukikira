@@ -100,12 +100,43 @@ for 好き嫌い.com
 
 ### レビュー用メモ（App Review Notes）
 ```
-This is an unofficial browser app for the Japanese website suki-kira.com.
-It accesses suki-kira.com directly to display rankings, allow voting, and show comments.
-All data is stored locally on the device only.
-No login is required to browse rankings. Voting and commenting require no account on our side (requests go directly to suki-kira.com).
+## Overview
 
-Test account: Not required.
+Sukikira is an unofficial native client for suki-kira.com, a Japanese public website where users vote on and discuss public figures (celebrities, athletes, etc.). The app fetches publicly accessible content from suki-kira.com and presents it through a native mobile interface.
+
+## No Account Required
+
+No account or login is needed to use any feature of this app. To browse rankings, simply launch the app. To vote or comment, tap any person card to open the detail screen, then tap the like/dislike button.
+
+## Features Beyond the Website (Guideline 4.2)
+
+The app provides significant native functionality not available on the suki-kira.com website:
+
+1. Swipe Voting — Tinder-style card swipe interface (right = like, left = dislike). Completely absent from the website.
+2. Bookmark Management — Folder-based bookmark system to organize favorite people. Stored locally; not a website feature.
+3. History Tracking — Separate tabs for vote history, browse history, and comment history. Website has no such feature.
+4. NG Word Filter — Users can register keywords to hide matching comments. Website has no such feature.
+5. Thread Search — Full-text search within comments on a person's detail page. Website has no such feature.
+6. Own Comment Tracking — Tracks the user's posted comments with upvote/downvote change indicators.
+7. Haptic Feedback — Tactile response on voting and comment reactions.
+
+All of the above are implemented natively and do not exist on the website.
+
+## Privacy & Data Handling
+
+- All user data (bookmarks, history, NG words, vote records) is stored locally on the device using AsyncStorage.
+- No data is sent to any server operated by us. There is no backend.
+- No analytics, advertising SDKs, or crash reporting tools are used.
+- When a user votes or posts a comment, the request goes directly to suki-kira.com — the same as using the website in a browser.
+- Privacy policy: https://sukikira.pages.dev/privacy.html
+
+## Third-Party Content
+
+This app is not affiliated with or endorsed by suki-kira.com or its operator. It accesses publicly available content only. The app name and subtitle ("for 好き嫌い.com") clearly indicate it is an unofficial client.
+
+## Test Account
+
+Not required. All features are accessible without registration.
 ```
 
 ---

@@ -1,6 +1,6 @@
 # セッション引継ぎドキュメント
 
-最終更新: 2026-02-23 (セッション9)
+最終更新: 2026-02-23 (セッション10)
 
 ---
 
@@ -263,17 +263,11 @@ const getCommentVoted = useCallback((commentId) => commentVotedRef.current[comme
 - スワイプ投票モード（ランキング画面「スワイプ」ボタン→カードスワイプ）
 - ブックマーク機能（フォルダ形式・Details★ボタン・フォルダ選択モーダル）
 
-### 未実装・残タスク
-- [x] 閲覧・コメント履歴機能（セッション7で実装済み）
-- [x] ブックマーク機能（セッション9で実装済み）
-- [x] 投票済みバッジ表示（PersonCard に votedType prop 追加、Home/Search から voted[name] を渡す）
-- [x] ハプティクス（詳細投票 `notificationAsync(Success)` / コメント good/bad `impactAsync(Light)`）
-- [x] コメントテキスト選択→NGワード追加（⋮メニュー「NGワード追加」→Modal+TextInput入力）
-- [x] スレ内検索機能（フィルタバー横🔍→TextInput検索バー展開、ヒット件数表示）
-- [x] 自分のコメント追跡機能（「自分」バッジ・「返信」バッジ・いいね増加数表示）
-- [x] スワイプ投票モード（SwipeVote.js・ランキング画面の「スワイプ」ボタンから遷移）
-- [x] フェーズ5: ランディングページ（Vite + Cloudflare Pages）（セッション9で実装済み）
-- [ ] フェーズ6: リリース準備（アイコン・ストア申請）
+### 残タスク・今後の対応
+- [x] フェーズ5: ランディングページ（Vite + Cloudflare Pages）実装済み → https://sukikira.pages.dev
+- [x] フェーズ6: App Store・Google Play 両ストア申請済み（審査中）
+- [ ] 審査結果対応（リジェクト時は STORE_METADATA.md の「リジェクト対応」文を参照）
+- [ ] スプラッシュスクリーン作成（未対応）
 - [見送り] Supabase リモートパース設定 → EAS Update（OTA）で代替可能なため保留
 
 ### セッション4で実装した機能（コメントUI改善）
@@ -293,6 +287,17 @@ const getCommentVoted = useCallback((commentId) => commentVotedRef.current[comme
 | 返信投稿失敗バグ修正 | 同上。type が正しくなったことで解決 | `sukikira.js` `postComment()` |
 | Post画面に派閥バッジ表示 | 投票済み種別（好き派/嫌い派）を左ボーダー付きバッジで表示。voted[name] から自動取得 | `Post.js` |
 | 詳細画面の画像拡大表示 | 写真タップで全画面モーダル表示（黒背景・fade アニメーション）。複数画像時は ‹ › ナビゲーションボタンと「n / N」カウンター表示 | `Details.js` |
+
+### セッション10で対応した事項
+
+| 対応 | 内容 | 実装場所 |
+|---|---|---|
+| App Store / Google Play 申請 | 両ストアに審査提出。審査中 | — |
+| サブタイトル変更 | 「好き嫌い.com 非公式ブラウザ」→「for 好き嫌い.com」 | `Settings.js`・`docs/STORE_METADATA.md` |
+| Android ステータスバー被り修正 | 全画面の `SafeAreaView` を `react-native` → `react-native-safe-area-context` に変更 | `Home.js`・`Search.js`・`Settings.js`・`History.js`・`Bookmark.js`・`BookmarkFolder.js`・`SwipeVote.js`・`Post.js`・`Details.js` |
+| ストア申請メタデータ整備 | App Store・Google Play 両ストア向けのコピペ用メタデータを作成 | `docs/STORE_METADATA.md`（新規） |
+
+---
 
 ### セッション9で実装した機能（ブックマーク・UX改善）
 
