@@ -18,7 +18,8 @@
     "newArchEnabled": true,
     "updates": {
       "enabled": true,
-      "fallbackToCacheTimeout": 10000
+      "fallbackToCacheTimeout": 10000,
+      "url": "https://u.expo.dev/8603ed2d-9527-4de8-8eef-e1db9acd7b55"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -58,6 +59,11 @@
     "plugins": [
       "expo-font",
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8603ed2d-9527-4de8-8eef-e1db9acd7b55"
+      }
+    }
   }
 }
