@@ -130,6 +130,18 @@ All of the above are implemented natively and do not exist on the website.
 - When a user votes or posts a comment, the request goes directly to suki-kira.com — the same as using the website in a browser.
 - Privacy policy: https://sukikira.pages.dev/privacy.html
 
+## User-Generated Content Moderation (Guideline 1.2)
+
+The app displays comments posted by users on suki-kira.com. The following moderation tools are available to every user:
+
+- **Hide comment**: Tap the ⋮ (three-dot) button on any comment → select "非表示" (Hide). The comment is immediately hidden for that user for the remainder of the session.
+- **Report comment**: Tap ⋮ → select "通報" (Report). This opens a browser link to suki-kira.com's official report page for that comment.
+- **Report user**: Tap ⋮ → select "ユーザー通報" (Report User). This opens a browser link to suki-kira.com's official user report page.
+
+All report actions are handled by suki-kira.com's own moderation system. The ⋮ button is visible on every comment in the detail screen.
+
+Additionally, users can register NG words (Settings tab) to automatically hide any comments containing those keywords.
+
 ## Third-Party Content
 
 This app is not affiliated with or endorsed by suki-kira.com or its operator. It accesses publicly available content only. The app name and subtitle ("for 好き嫌い.com") clearly indicate it is an unofficial client.
