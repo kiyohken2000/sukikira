@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const STORAGE_KEY_NG_WORDS = '@sukikira:ngWords'
@@ -10,11 +10,24 @@ const STORAGE_KEY_COMMENT_HISTORY = '@sukikira:commentHistory'
 const STORAGE_KEY_BOOKMARK_FOLDERS = '@sukikira:bookmarkFolders'
 const STORAGE_KEY_COMMENT_VOTED = '@sukikira:commentVoted'
 
+const VOTE_EXPIRE_MS = 24 * 60 * 60 * 1000 // 24時間
+
 const SettingsContext = createContext(null)
 
 export const SettingsProvider = ({ children }) => {
   const [ngWords, setNgWords] = useState([])
-  const [voted, setVoted] = useState({}) // { [name]: 'like' | 'dislike' }
+  // 内部: { [name]: { type: 'like'|'dislike', votedAt: number } }
+  const [votedRaw, setVotedRaw] = useState({})
+  // 外部公開: 24時間以内の投票のみ { [name]: 'like' | 'dislike' }
+  const voted = useMemo(() => {
+    const now = Date.now()
+    const result = {}
+    for (const [name, entry] of Object.entries(votedRaw)) {
+      if (typeof entry === 'string') continue // 旧フォーマット → 期限切れ扱い
+      if (now - entry.votedAt < VOTE_EXPIRE_MS) result[name] = entry.type
+    }
+    return result
+  }, [votedRaw])
   const [resultCache, setResultCache] = useState({}) // { [name]: { resultInfo, comments } }
   const resultCacheRef = useRef({})
   // コメント good/bad 投票済み（セッション中のみ・AsyncStorage 不要）
@@ -41,7 +54,17 @@ export const SettingsProvider = ({ children }) => {
           AsyncStorage.getItem(STORAGE_KEY_COMMENT_VOTED),
         ])
         if (ngRaw) setNgWords(JSON.parse(ngRaw))
-        if (votedRaw) setVoted(JSON.parse(votedRaw))
+        if (votedRaw) {
+          const parsed = JSON.parse(votedRaw)
+          // 旧フォーマット（string値）を新フォーマットにマイグレーション
+          const migrated = {}
+          for (const [name, entry] of Object.entries(parsed)) {
+            migrated[name] = typeof entry === 'string'
+              ? { type: entry, votedAt: 0 } // 旧データは期限切れ扱い
+              : entry
+          }
+          setVotedRaw(migrated)
+        }
         if (cacheRaw) {
           const parsed = JSON.parse(cacheRaw)
           setResultCache(parsed)
@@ -82,8 +105,8 @@ export const SettingsProvider = ({ children }) => {
 
   // 投票済み記録（voted マップ + voteHistory）
   const recordVote = useCallback((name, type, imageUrl) => {
-    setVoted((prev) => {
-      const next = { ...prev, [name]: type }
+    setVotedRaw((prev) => {
+      const next = { ...prev, [name]: { type, votedAt: Date.now() } }
       AsyncStorage.setItem(STORAGE_KEY_VOTED, JSON.stringify(next))
       return next
     })

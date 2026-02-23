@@ -216,6 +216,10 @@ export default function Details() {
   }, [])
 
   const onReply = useCallback((comment) => {
+    if (!voteStatus) {
+      Alert.alert('投票が必要です', '投票後にコメントを投稿できます')
+      return
+    }
     navigation.navigate('Post', { name, replyTo: comment.id })
   }, [name, navigation])
 
@@ -336,9 +340,15 @@ export default function Details() {
         {/* コメント投稿ボタン */}
         <TouchableOpacity
           style={styles.postBtn}
-          onPress={() => navigation.navigate('Post', { name })}
+          onPress={() => {
+            if (!voteStatus) {
+              Alert.alert('投票が必要です', '投票後にコメントを投稿できます')
+              return
+            }
+            navigation.navigate('Post', { name })
+          }}
         >
-          <FontIcon name="pencil" color={colors.primary} size={16} />
+          <FontIcon name="pencil" color={voteStatus ? colors.primary : colors.textMuted} size={16} />
         </TouchableOpacity>
       </View>
 
