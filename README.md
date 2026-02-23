@@ -28,7 +28,7 @@
 |------|------|
 | モバイルアプリ | Expo（React Native） |
 | ランディングページ | Vite + React |
-| ホスティング | Cloudflare Pages |
+| ホスティング | Cloudflare Pages（https://sukikira.pages.dev） |
 | データソース | 好き嫌い.com（直接リクエスト） |
 
 **バックエンドなし。** Expoから好き嫌い.comに直接リクエストする構成。

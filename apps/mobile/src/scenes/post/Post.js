@@ -23,7 +23,7 @@ export default function Post() {
   const navigation = useNavigation()
   const route = useRoute()
   const { name, replyTo } = route.params
-  const { cacheResult, voted } = useSettings()
+  const { cacheResult, voted, recordComment } = useSettings()
 
   // 投票済みの種別から初期タイプを決定 ('like'→好き派='1', 'dislike'→嫌い派='0')
   const voteStatus = voted[name]
@@ -39,6 +39,11 @@ export default function Post() {
       const result = await postComment(name, body.trim(), defaultType)
       // 投稿結果をキャッシュに保存してから戻る（新しいDetailsをpushしない）
       cacheResult(name, result.resultInfo, result.comments)
+      // 自分のコメントIDを特定して記録
+      const trimmedBody = body.trim()
+      const coreBody = trimmedBody.replace(/^>>\d+\n?/, '').slice(0, 30)
+      const matched = result.comments.find(c => c.body === trimmedBody || (coreBody && c.body.includes(coreBody)))
+      recordComment(name, trimmedBody, matched?.id ?? null, matched?.upvoteCount ?? 0, matched?.downvoteCount ?? 0)
       Alert.alert('投稿完了', 'コメントを投稿しました', [
         {
           text: 'OK',

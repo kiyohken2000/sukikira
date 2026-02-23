@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>スキキラ - 好き嫌い.com 非公式ブラウザアプリ</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="images/apple-touch-icon.png" />
+  <meta name="description" content="好き嫌い.com を快適に楽しめる非公式アプリ。ランキング閲覧・投票・スワイプ投票・ブックマーク管理など。" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0a;
+      --card: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #e5e5e5;
+      --text-secondary: #888;
+      --text-muted: #555;
+      --primary: #f97316;
+      --blue: #3b82f6;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      line-height: 1.6;
+    }
+
+    /* ─── ヘッダー ─── */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10,10,10,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--text);
+    }
+    .logo img {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+    }
+    .logo-name {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .header-privacy {
+      color: var(--text-secondary);
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .header-privacy:hover { color: var(--primary); }
+
+    /* ─── ヒーロー ─── */
+    .hero {
+      text-align: center;
+      padding: 80px 24px 60px;
+    }
+    .hero-icon {
+      width: 100px;
+      height: 100px;
+      border-radius: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 32px rgba(249,115,22,0.25);
+    }
+
+    .hero-badge {
+      display: inline-block;
+      background: rgba(249,115,22,0.15);
+      color: var(--primary);
+      border: 1px solid rgba(249,115,22,0.3);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 14px;
+      margin-bottom: 24px;
+      letter-spacing: 0.5px;
+    }
+    .hero h1 {
+      font-size: clamp(36px, 8vw, 64px);
+      font-weight: 900;
+      letter-spacing: -1px;
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+    .hero h1 span { color: var(--primary); }
+    .hero-desc {
+      color: var(--text-secondary);
+      font-size: clamp(15px, 2.5vw, 18px);
+      max-width: 480px;
+      margin: 0 auto 40px;
+    }
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-secondary {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+    .btn-icon { font-size: 20px; }
+
+    /* ─── スクリーンショット（ヒーロー下） ─── */
+    .hero-screenshots {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 60px;
+      padding: 0 24px;
+      overflow: hidden;
+    }
+    .hero-screenshots img {
+      width: 160px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 48px rgba(0,0,0,0.6);
+    }
+    .hero-screenshots img:nth-child(2) {
+      transform: translateY(-20px);
+    }
+    .hero-screenshots img:nth-child(3) {
+      transform: translateY(10px);
+    }
+    @media (max-width: 500px) {
+      .hero-screenshots img:nth-child(3) { display: none; }
+    }
+
+    /* ─── 機能セクション ─── */
+    .features {
+      max-width: 1000px;
+      margin: 80px auto;
+      padding: 0 24px;
+    }
+    .section-label {
+      text-align: center;
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .section-title {
+      text-align: center;
+      font-size: clamp(24px, 5vw, 36px);
+      font-weight: 800;
+      margin-bottom: 60px;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(249,115,22,0.3);
+    }
+    .feature-ss {
+      width: 100%;
+      aspect-ratio: 9/16;
+      object-fit: cover;
+      object-position: top;
+      display: block;
+      max-height: 340px;
+    }
+    .feature-body {
+      padding: 20px;
+    }
+    .feature-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--primary);
+      background: rgba(249,115,22,0.12);
+      border-radius: 6px;
+      padding: 2px 8px;
+      margin-bottom: 8px;
+      letter-spacing: 0.3px;
+    }
+    .feature-name {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .feature-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ─── 区切り ─── */
+    .divider {
+      width: 1px;
+      height: 60px;
+      background: linear-gradient(to bottom, transparent, var(--border), transparent);
+      margin: 0 auto;
+    }
+
+    /* ─── フッター ─── */
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center;
+      padding: 40px 24px;
+    }
+    footer p {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    footer a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 13px;
+      margin: 0 12px;
+    }
+    footer a:hover { color: var(--primary); }
+    .footer-note {
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ヘッダー -->
+  <header>
+    <a class="logo" href="#">
+      <img src="images/logo-lg.png" alt="スキキラ" />
+      <span class="logo-name">スキキラ</span>
+    </a>
+    <a class="header-privacy" href="privacy.html">プライバシーポリシー</a>
+  </header>
+
+  <!-- ヒーロー -->
+  <section class="hero">
+    <img src="images/logo-lg.png" alt="スキキラ" class="hero-icon" />
+    <div class="hero-badge">好き嫌い.com 非公式ブラウザ</div>
+    <h1>好きか、<span>嫌い</span>か。<br>もっと手軽に。</h1>
+    <p class="hero-desc">
+      好き嫌い.com を快適に楽しめる非公式アプリ。
+      ランキング・投票・コメント・ブックマークをスマートフォンで。
+    </p>
+    <div class="btn-group">
+      <a class="btn btn-primary btn-disabled" href="#">
+        <span class="btn-icon">📱</span> App Store（近日公開）
+      </a>
+      <a class="btn btn-secondary btn-disabled" href="#">
+        <span class="btn-icon">🤖</span> Google Play（近日公開）
+      </a>
+    </div>
+
+    <div class="hero-screenshots">
+      <img src="images/ss_home_1.jpg" alt="ランキング画面" />
+      <img src="images/ss_swipe_mode_1.jpg" alt="スワイプ投票" />
+      <img src="images/ss_detail_1.jpg" alt="詳細画面" />
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- 機能 -->
+  <section class="features">
+    <p class="section-label">Features</p>
+    <h2 class="section-title">全部入りで、使いやすい</h2>
+
+    <div class="feature-grid">
+
+      <div class="feature-card">
+        <img class="feature-ss" src="images/ss_home_1.jpg" alt="ランキング" />
+        <div class="feature-body">
+          <span class="feature-tag">ランキング</span>
+          <div class="feature-name">好感度ランキングをチェック</div>
+          <div class="feature-desc">好感度・不人気・トレンドの3タブで最新ランキングを確認。無限スクロールで次々閲覧できます。</div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <img class="feature-ss" src="images/ss_swipe_mode_1.jpg" alt="スワイプ投票" />
+        <div class="feature-body">
+          <span class="feature-tag">スワイプ投票</span>
+          <div class="feature-name">スワイプで快速投票</div>
+          <div class="feature-desc">カードを右にスワイプで「好き」、左で「嫌い」。未投票の人物をテンポよく評価できます。</div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <img class="feature-ss" src="images/ss_detail_1.jpg" alt="詳細画面" />
+        <div class="feature-body">
+          <span class="feature-tag">詳細・コメント</span>
+          <div class="feature-name">コメントを読んで投票</div>
+          <div class="feature-desc">好き派・嫌い派のコメントをフィルタ表示。コメントへのgood/bad投票や返信投稿も可能。</div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <img class="feature-ss" src="images/ss_detail_search_1.jpg" alt="スレ内検索" />
+        <div class="feature-body">
+          <span class="feature-tag">スレ内検索</span>
+          <div class="feature-name">コメントをキーワード検索</div>
+          <div class="feature-desc">気になるキーワードでスレッド内を絞り込み。大量のコメントから目的の発言をすぐに見つけられます。</div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <img class="feature-ss" src="images/ss_bookmark_1.jpg" alt="ブックマーク" />
+        <div class="feature-body">
+          <span class="feature-tag">ブックマーク</span>
+          <div class="feature-name">フォルダで整理・管理</div>
+          <div class="feature-desc">「俳優」「アイドル」など自由にフォルダを作成。気になる人物をカテゴリ別にブックマーク管理できます。</div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <img class="feature-ss" src="images/ss_history_1.jpg" alt="履歴" />
+        <div class="feature-body">
+          <span class="feature-tag">履歴</span>
+          <div class="feature-name">投票・閲覧・コメント履歴</div>
+          <div class="feature-desc">過去の投票・閲覧・コメント投稿が時系列で確認できます。あの人物の詳細にすぐ戻れます。</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- フッター -->
+  <footer>
+    <p>© 2025 スキキラ. 好き嫌い.com の非公式アプリです。</p>
+    <div>
+      <a href="privacy.html">プライバシーポリシー</a>
+    </div>
+    <p class="footer-note">このアプリは好き嫌い.com とは無関係の非公式アプリです。</p>
+  </footer>
+
+</body>
+</html>

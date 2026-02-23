@@ -4,6 +4,7 @@ import { TransitionPresets } from '@react-navigation/stack'
 import TabNavigator from '../tabs/Tabs'
 import Details from '../../../scenes/details/Details'
 import Post from '../../../scenes/post/Post'
+import SwipeVote from '../../../scenes/swipe/SwipeVote'
 
 const Stack = createStackNavigator()
 
@@ -26,6 +27,13 @@ export default function RootStack() {
         options={{
           presentation: 'modal',
           ...TransitionPresets.ModalPresentationIOS,
+        }}
+      />
+      <Stack.Screen
+        name="SwipeVote"
+        component={SwipeVote}
+        options={{
+          ...TransitionPresets.SlideFromRightIOS,
         }}
       />
     </Stack.Navigator>

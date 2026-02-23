@@ -1,6 +1,6 @@
 # セッション引継ぎドキュメント
 
-最終更新: 2026-02-23 (セッション6)
+最終更新: 2026-02-23 (セッション9)
 
 ---
 
@@ -18,12 +18,14 @@
 NavigationContainer
   └── RootStack (createStackNavigator, headerShown: false)
         ├── HomeRoot → TabNavigator (底部タブ)
-        │     ├── RankingTab   → RankingStacks  → Home
-        │     ├── SearchTab    → SearchStacks   → Search
-        │     ├── HistoryTab   → HistoryStacks  → History  ← 次セッションで追加予定
-        │     └── SettingsTab  → SettingsStacks → Settings
-        ├── Details  (SlideFromRightIOS)
-        └── Post     (modal, ModalPresentationIOS)
+        │     ├── RankingTab    → RankingStacks   → Home
+        │     ├── SearchTab     → SearchStacks    → Search
+        │     ├── HistoryTab    → HistoryStacks   → History
+        │     ├── BookmarkTab   → BookmarkStacks  → Bookmark → BookmarkFolder
+        │     └── SettingsTab   → SettingsStacks  → Settings
+        ├── Details   (SlideFromRightIOS)
+        ├── Post      (modal, ModalPresentationIOS)
+        └── SwipeVote (SlideFromRightIOS)
 ```
 
 - `HomeStacks.js` は **未使用ファイル**（Tabs.js に組み込まれていない）
@@ -37,14 +39,20 @@ NavigationContainer
 | ファイル | 役割 |
 |---|---|
 | `apps/mobile/src/utils/sukikira.js` | suki-kira.com への全リクエスト処理 |
-| `apps/mobile/src/contexts/SettingsContext.js` | NGワード・投票済み・結果キャッシュ・コメント投票管理 |
+| `apps/mobile/src/contexts/SettingsContext.js` | NGワード・投票済み・結果キャッシュ・コメント投票・履歴・ブックマーク管理 |
 | `apps/mobile/src/routes/navigation/rootStack/RootStack.js` | ルートナビゲーター |
-| `apps/mobile/src/routes/navigation/tabs/Tabs.js` | タブナビゲーター（RankingTab, SearchTab, SettingsTab） |
-| `apps/mobile/src/scenes/home/Home.js` | ランキング画面（無限スクロール対応） |
+| `apps/mobile/src/routes/navigation/tabs/Tabs.js` | タブナビゲーター（RankingTab, SearchTab, HistoryTab, BookmarkTab, SettingsTab） |
+| `apps/mobile/src/scenes/home/Home.js` | ランキング画面（無限スクロール・スワイプ投票ボタン） |
 | `apps/mobile/src/scenes/search/Search.js` | 検索画面 |
-| `apps/mobile/src/scenes/details/Details.js` | 人物詳細画面（複数画像・タグ・コメント無限スクロール） |
+| `apps/mobile/src/scenes/details/Details.js` | 人物詳細画面（スレ内検索・自コメバッジ・ブックマーク★ボタン等） |
 | `apps/mobile/src/scenes/post/Post.js` | コメント投稿画面 |
 | `apps/mobile/src/scenes/settings/Settings.js` | 設定画面（NGワード管理） |
+| `apps/mobile/src/scenes/history/History.js` | 履歴画面（投票・閲覧・コメント3セクション） |
+| `apps/mobile/src/scenes/bookmark/Bookmark.js` | ブックマーク画面（フォルダ一覧・作成・削除） |
+| `apps/mobile/src/scenes/bookmark/BookmarkFolder.js` | フォルダ内人物一覧（タップでDetails・個別削除） |
+| `apps/mobile/src/scenes/swipe/SwipeVote.js` | スワイプ投票画面（PanResponder + Animated） |
+| `apps/mobile/src/routes/navigation/stacks/HistoryStacks.js` | 履歴タブ用スタックナビゲーター |
+| `apps/mobile/src/routes/navigation/stacks/BookmarkStacks.js` | ブックマークタブ用スタックナビゲーター |
 | `apps/mobile/src/components/VoteBar/VoteBar.js` | 好き嫌い割合バー |
 | `apps/mobile/src/components/PersonCard/PersonCard.js` | ランキング/検索結果の人物カード |
 | `apps/mobile/src/components/CommentItem/CommentItem.js` | コメント1件（good/bad ボタン付き） |
@@ -131,11 +139,12 @@ NavigationContainer
 | キー | 内容 |
 |---|---|
 | `@sukikira:ngWords` | NGワード配列 `string[]` |
-| `@sukikira:voted` | 投票済みマップ `{ [name]: 'like' \| 'dislike' }` （投票済み判定用・既存） |
-| `@sukikira:voteHistory` | 投票履歴 `Array<{ name, imageUrl, voteType, time }>` （履歴表示用・追加予定） |
-| `@sukikira:browseHistory` | 閲覧履歴 `Array<{ name, imageUrl, time }>` （追加予定） |
-| `@sukikira:commentHistory` | コメント履歴 `Array<{ name, body, time }>` （追加予定） |
+| `@sukikira:voted` | 投票済みマップ `{ [name]: 'like' \| 'dislike' }` （投票済み判定用） |
+| `@sukikira:voteHistory` | 投票履歴 `Array<{ name, imageUrl, voteType, time }>` |
+| `@sukikira:browseHistory` | 閲覧履歴 `Array<{ name, imageUrl, time }>` |
+| `@sukikira:commentHistory` | コメント履歴 `Array<{ name, body, time }>` |
 | `@sukikira:resultCache` | 結果キャッシュ `{ [name]: { resultInfo, comments } }` |
+| `@sukikira:bookmarkFolders` | ブックマークフォルダ `Array<{ id, name, items: { name, imageUrl }[] }>` |
 
 ---
 
@@ -242,22 +251,30 @@ const getCommentVoted = useCallback((commentId) => commentVotedRef.current[comme
 - コメントフィルタ（すべて/好き派/嫌い派）
 - コメント無限スクロール（`?nxc=` ページネーション）
 - NGワードフィルタ（SettingsContext 経由）
+- コメント good/bad ボタン（投票済み状態がセッション中持続）
 - コメント投稿（投稿後に既存Details画面へ戻る・キャッシュ反映）
 - 設定画面（NGワード追加・削除UI）
-- コメント good/bad ボタン（投票済み状態がセッション中持続）
+- ハプティクス（投票・コメント good/bad）
+- 履歴タブ（投票・閲覧・コメント履歴、タップで Details へ）
+- 投票済みバッジ / コメント済みバッジ（ランキング・検索の人物カード）
+- ⋮メニュー「NGワード追加」（Modal+TextInput でキーワード登録）
+- スレ内検索（フィルタバー横🔍→検索バー展開、ヒット件数表示）
+- 自分のコメント追跡（「自分」バッジ・「返信」バッジ・いいね増加数）
+- スワイプ投票モード（ランキング画面「スワイプ」ボタン→カードスワイプ）
+- ブックマーク機能（フォルダ形式・Details★ボタン・フォルダ選択モーダル）
 
 ### 未実装・残タスク
-- [ ] 閲覧・コメント履歴機能（次セッション予定。詳細は下記）
-- [ ] ブックマーク機能（フォルダ形式カテゴリ管理。詳細は下記）
-- [ ] 投票済みバッジ表示（ランキング・検索画面の人物カードに投票済みマークを表示）
+- [x] 閲覧・コメント履歴機能（セッション7で実装済み）
+- [x] ブックマーク機能（セッション9で実装済み）
+- [x] 投票済みバッジ表示（PersonCard に votedType prop 追加、Home/Search から voted[name] を渡す）
 - [x] ハプティクス（詳細投票 `notificationAsync(Success)` / コメント good/bad `impactAsync(Light)`）
-- [ ] コメントテキスト選択→NGワード追加（詳細は下記）
-- [ ] スレ内検索機能（詳細は下記）
-- [ ] 自分のコメント追跡機能（レス確認・反応確認。詳細は下記）
-- [ ] スワイプ投票モード（詳細は下記）
-- [ ] Supabase リモートパース設定（詳細は下記）
-- [ ] フェーズ5: ランディングページ（Vite + Cloudflare Pages）
-- [ ] フェーズ6: リリース準備（アイコン・スクリーンショット・ストア申請）
+- [x] コメントテキスト選択→NGワード追加（⋮メニュー「NGワード追加」→Modal+TextInput入力）
+- [x] スレ内検索機能（フィルタバー横🔍→TextInput検索バー展開、ヒット件数表示）
+- [x] 自分のコメント追跡機能（「自分」バッジ・「返信」バッジ・いいね増加数表示）
+- [x] スワイプ投票モード（SwipeVote.js・ランキング画面の「スワイプ」ボタンから遷移）
+- [x] フェーズ5: ランディングページ（Vite + Cloudflare Pages）（セッション9で実装済み）
+- [ ] フェーズ6: リリース準備（アイコン・ストア申請）
+- [見送り] Supabase リモートパース設定 → EAS Update（OTA）で代替可能なため保留
 
 ### セッション4で実装した機能（コメントUI改善）
 - コメントに番号・投稿者名・投稿日時を表示（sukikira.js parseComments に author/dateText 追加）
@@ -277,6 +294,52 @@ const getCommentVoted = useCallback((commentId) => commentVotedRef.current[comme
 | Post画面に派閥バッジ表示 | 投票済み種別（好き派/嫌い派）を左ボーダー付きバッジで表示。voted[name] から自動取得 | `Post.js` |
 | 詳細画面の画像拡大表示 | 写真タップで全画面モーダル表示（黒背景・fade アニメーション）。複数画像時は ‹ › ナビゲーションボタンと「n / N」カウンター表示 | `Details.js` |
 
+### セッション9で実装した機能（ブックマーク・UX改善）
+
+| 機能 | 内容 | 実装場所 |
+|---|---|---|
+| ブックマーク機能 | フォルダ形式でブックマーク管理。Details ヘッダー★ボタン→フォルダ選択モーダル（追加/解除/新規フォルダ作成）。専用タブで一覧・詳細閲覧 | `Bookmark.js`・`BookmarkFolder.js`・`BookmarkStacks.js`（新規）+ `SettingsContext.js`・`Tabs.js`・`Details.js` |
+| ボトムタブのスクロールトップ | アクティブなタブを再タップすると一番上にスクロール（`useScrollToTop`） | `Home.js`・`Search.js`・`History.js` |
+| 検索クリアボタン | 検索後に TextInput 右端の ✕ をタップでキーワード・結果・状態をリセット | `Search.js` |
+| スワイプ投票: パーセント非表示 | 投票前の判断を偏らせないよう VoteBar・ランクバッジを非表示に | `SwipeVote.js` |
+
+---
+
+### セッション8で実装した機能（UI機能強化）
+
+| 機能 | 内容 | 実装場所 |
+|---|---|---|
+| 投票済みバッジ | PersonCard に `votedType` prop。「好き済」橙・「嫌い済」青 | `PersonCard.js` + `Home.js` + `Search.js` |
+| コメント済みバッジ | PersonCard に `commented` prop。「コメ済」緑 | `PersonCard.js` + `Home.js` + `Search.js` |
+| ⋮メニュー「NGワード追加」 | Modal+TextInput でキーワード入力 → `addNgWord()` | `CommentItem.js`（useSettings 直接参照） |
+| スレ内検索 | フィルタバー横🔍→検索バー展開・ヒット件数表示 | `Details.js` |
+| 検索バー キーボード消えバグ修正 | 検索バーを FlatList の ListHeaderComponent 外に移動 | `Details.js` |
+| 自分のコメント追跡 | 「自分」バッジ（橙）・「返信」バッジ（紫）・いいね増加数 (+N) | `CommentItem.js` + `Details.js` |
+| commentId 保存 | Post.js で result.comments から本文マッチしてID特定 | `Post.js` + `SettingsContext.js` |
+| スワイプ投票モード | PanResponder+Animated カードスワイプ。ローカルキュー管理でバグ修正済み | `SwipeVote.js`（新規）+ `RootStack.js` + `Home.js` |
+
+#### スワイプ投票の設計上の注意（バグ修正済み）
+- `voted` state に依存した `unvotedItems` の useMemo は「投票→voted 更新→キュー再計算→インデックスズレ」を引き起こす
+- **ローカルキュー** (`queue` state) でマウント時に一度だけフィルタし、以降は `queue.slice(1)` で進める
+- `position.setValue({x:0,y:0})` は `requestAnimationFrame` 内で React 再描画後に実行（フラッシュ防止）
+- `PanResponder` は ref 経由で最新の swipeOut/voting を参照し、一度だけ作成（`useMemo(()=>..., [])`）
+
+---
+
+### セッション7で実装した機能（履歴タブ）
+
+| 機能 | 内容 | 実装場所 |
+|---|---|---|
+| 履歴タブ追加 | ボトムタブに「履歴」タブ（clock-o アイコン）を追加 | `Tabs.js` |
+| HistoryStacks | 履歴タブ用スタックナビゲーター | `HistoryStacks.js` （新規） |
+| History 画面 | 投票履歴・閲覧履歴・コメント履歴の3セクション SectionList。各行タップで Details へ遷移 | `History.js` （新規） |
+| 閲覧履歴記録 | Details ロード成功時に `recordBrowse(name, imageUrl)` を呼ぶ。dedup 付き最大30件 | `Details.js` + `SettingsContext.js` |
+| コメント履歴記録 | Post 投稿成功時に `recordComment(name, body)` を呼ぶ。最大30件 | `Post.js` + `SettingsContext.js` |
+| 投票履歴記録 | `recordVote` を拡張し imageUrl も受け取り `voteHistory` に追記。dedup 付き最大50件 | `SettingsContext.js` |
+| AsyncStorage キー | `@sukikira:voteHistory` / `@sukikira:browseHistory` / `@sukikira:commentHistory` 追加 | `SettingsContext.js` |
+
+---
+
 ### セッション6で実装した機能（ハプティクス）
 
 | 機能 | 内容 | 実装場所 |
@@ -292,132 +355,11 @@ const getCommentVoted = useCallback((commentId) => commentVotedRef.current[comme
 
 ---
 
-### 将来実装予定：コメントテキスト選択→NGワード追加
-
-#### 概要
-コメント本文内のテキストを長押し選択し、選択した文字列をそのままNGワードに追加できる機能。
-設定画面を開かずにインラインで登録できるため、NGワード管理が大幅に楽になる。
-
-#### 実装方針
-- `CommentItem.js` のコメント本文を `Text` から `TextInput`（`editable={false}` + `multiline`）に変更すると OS標準のテキスト選択UIが使える
-  - ただし iOS/Android でスタイルの調整が必要
-- 選択後に出るコンテキストメニュー（カット・コピー等）にカスタムアクションを追加するのは困難
-- **現実的な代替案**: コメント本文テキストを長押し → Alert または ActionSheet で「このコメントのNGワードを追加」→ テキスト入力ダイアログで選択範囲（またはキーワード）を入力 → `addNgWord()` を呼ぶ
-- または ⋮ メニューの「NGワード追加」から TextInput で手入力する簡易版でも十分
+### ~~将来実装予定：NGワード追加・投票済みバッジ・スレ内検索・自分のコメント追跡・スワイプ投票~~ → セッション8で実装済み
 
 ---
 
-### 将来実装予定：投票済みバッジ（ランキング・検索画面）
-
-#### 概要
-ランキング画面・検索結果の人物カードに、投票済みかどうかを示すバッジを表示する。
-`SettingsContext` の `voted[name]` を参照するだけで実装可能。
-
-#### 実装方針
-- `PersonCard.js` に `votedType?: 'like' | 'dislike'` prop を追加
-- 好き派なら橙色の「好き済み」、嫌い派なら青色の「嫌い済み」バッジをカード右上などに表示
-- `Home.js` / `Search.js` から `voted[name]` を渡す
-
----
-
-### 将来実装予定：スレ内検索機能
-
-#### 概要
-人物詳細画面のコメント一覧内でキーワード検索できる機能。
-大量のコメントから特定の発言や話題を素早く見つけられる。
-
-#### 実装方針
-- Details.js のフィルタバーに検索アイコン（🔍）ボタンを追加
-- タップで TextInput 検索バーを展開（フィルタバーの下に inline で表示）
-- `filteredComments` の計算に `searchQuery` 条件を追加: `c.body.includes(searchQuery)`
-- 検索クリア（×ボタン）で検索バーを閉じる
-- 検索中はコメント内の一致テキストをハイライト表示（任意）
-
----
-
-### 将来実装予定：自分のコメント追跡機能
-
-#### 概要
-自分が投稿したコメントを追跡し、そのコメントへのレス（`>>NNN` 参照）や good/bad 反応の変化を確認できる機能。
-
-#### サブ機能1: 自分のコメントへのレス確認
-- コメント投稿成功後のレスポンスから自分のコメントIDを保存（`commentHistory` に `commentId` フィールドを追加）
-- Details.js で該当人物を開いた際、`commentHistory` と照合して「自分のコメント」にバッジ表示
-- 自分のコメントIDへの `>>NNN` アンカーを持つコメントを「自分へのレス」として強調表示
-
-#### サブ機能2: good/bad 反応確認
-- 投稿時の upvoteCount / downvoteCount を `commentHistory` に保存（`initialUpvotes`, `initialDownvotes`）
-- 次回そのページを開いた際に現在値と比較し、増分を「+N件のいいね」のように表示
-
-#### データ構造拡張
-```js
-// @sukikira:commentHistory の各エントリ
-{
-  name: "人物名",
-  body: "コメント本文プレビュー",
-  time: "ISO8601",
-  commentId: "12345",         // 投稿後のレスポンスHTMLから取得
-  initialUpvotes: 0,
-  initialDownvotes: 0,
-}
-```
-
-#### 制限事項
-- `postComment` のレスポンスHTML から自分のコメントIDを特定する処理が必要（parseComments で最新コメントを探す）
-- サーバー側でコメントIDが確定するタイミングの関係でIDの特定が難しい場合、本文でマッチングするフォールバックも検討
-
----
-
-### 将来実装予定：スワイプ投票モード
-
-#### 概要
-未投票の人物をカード形式で1枚ずつ表示し、左右スワイプで好き/嫌いを連続投票できるモード。
-Tinderライクな操作で、ブラウザには絶対できないアプリならではの体験。
-ランキングを眺めながら「まだ投票していない人」を効率よく消化できる。
-
-#### 実装方針
-- ランキングタブに「スワイプ投票」ボタンを追加、または独立したタブとして追加
-- カードスタックUI: 上位N件の未投票人物を積み重ねて表示
-- `react-native-gesture-handler` の `PanGestureHandler` でスワイプ検出
-- スワイプ方向に応じて `vote(name, 'like' | 'dislike')` を呼ぶ
-- 投票済み人物は `voted` を参照してスキップ
-- ハプティクスと組み合わせると体験が向上
-
----
-
-### 将来実装予定：ブックマーク機能（フォルダ形式）
-
-#### 概要
-人物をフォルダ（カテゴリ）に分けてブックマーク管理できる機能。
-「俳優」「アイドル」「スポーツ選手」など自由にフォルダを作成して整理できる。
-シンプルなリスト型ではなくフォルダ構造にすることで、多数の人物を管理しやすくする。
-
-#### データ構造
-```js
-// AsyncStorage: @sukikira:bookmarkFolders
-[
-  {
-    id: "uuid",
-    name: "俳優",
-    items: [
-      { name: "木村拓哉", imageUrl: "..." },
-      { name: "福山雅治", imageUrl: "..." },
-    ]
-  },
-  {
-    id: "uuid2",
-    name: "アイドル",
-    items: [...]
-  }
-]
-```
-
-#### 実装方針
-- SettingsContext に追加: `bookmarkFolders`, `addBookmarkFolder(name)`, `removeBookmarkFolder(id)`, `addToFolder(folderId, name, imageUrl)`, `removeFromFolder(folderId, name)`, `getBookmarkFolders(name)` → 所属フォルダID[]
-- Details.js: ナビゲーションヘッダーにブックマークボタン（★）→ タップでフォルダ選択モーダルを表示
-  - フォルダ一覧 + 「新規フォルダ作成」 → 選んだフォルダに追加/解除
-- 表示場所: 履歴タブ内の「ブックマーク」セクション、またはブックマーク専用タブ（要検討）
-  - フォルダ一覧 → フォルダタップで人物リスト → タップで Details へ
+### ~~将来実装予定：ブックマーク機能（フォルダ形式）~~ → セッション9で実装済み
 
 ---
 
@@ -484,7 +426,7 @@ Supabase から最新パース設定を取得（タイムアウト: 3〜5秒）
 
 ---
 
-### 次セッションで実装予定：閲覧・コメント履歴機能
+### ~~次セッションで実装予定：閲覧・コメント履歴機能~~ → セッション7で実装済み
 
 #### 概要
 - **閲覧履歴**: Details 画面を開いた人物の記録（名前・画像・日時）
@@ -524,7 +466,82 @@ Supabase から最新パース設定を取得（タイムアウト: 3〜5秒）
 ### 既知の制限
 - Cookie なし（未投票状態）では結果・コメント閲覧不可。キャッシュがあれば表示
 - 木村拓哉のような超有名人は最新コメントが全て嫌い派になる場合がある（サーバー側の仕様）
-- コメント good/bad の投票済み状態はアプリ再起動でリセット（AsyncStorage には保存しない）
+- コメント good/bad の投票済み状態は AsyncStorage に永続化（`@sukikira:commentVoted`）
+
+---
+
+## フェーズ5: ランディングページ（apps/web/）
+
+### ファイル構成
+| ファイル | 役割 |
+|---|---|
+| `apps/web/index.html` | ランディングページ本体 |
+| `apps/web/privacy.html` | プライバシーポリシーページ |
+| `apps/web/vite.config.js` | Vite MPA設定（index.html + privacy.html） |
+| `apps/web/package.json` | vite devDependency |
+| `apps/web/images/` | スクリーンショット画像（ss_*.jpg） |
+
+### デプロイ（Cloudflare Pages）
+```
+ビルドコマンド: npm run build
+出力ディレクトリ: dist
+ルートディレクトリ: apps/web
+```
+
+### 連絡先メールアドレス
+`retwpay@gmail.com`（プライバシーポリシーのお問い合わせ先）
+
+### スクリーンショット使用箇所
+| ファイル | 使用箇所 |
+|---|---|
+| ss_home_1.jpg | ヒーロー・ランキング機能カード |
+| ss_swipe_mode_1.jpg | ヒーロー・スワイプ投票機能カード |
+| ss_detail_1.jpg | ヒーロー・詳細/コメント機能カード |
+| ss_detail_search_1.jpg | スレ内検索機能カード |
+| ss_bookmark_1.jpg | ブックマーク機能カード |
+| ss_history_1.jpg | 履歴機能カード |
+
+---
+
+## フェーズ6: リリース準備
+
+### アプリアイコン（Adobe Firefly）
+
+アプリの世界観: 好き嫌い投票アプリ。温色（橙・ピンク）＝好き、寒色（青・紫）＝嫌いの二面性。
+
+#### 方向性A — ハート分割（推奨）
+```
+App icon, split heart shape, left half warm orange-coral filled,
+right half cool blue cracked/broken, dark charcoal background (#1a1a2e),
+flat design, minimalist, sharp edges, mobile app icon style,
+no text, rounded square composition
+```
+
+#### 方向性B — サムズアップ／ダウン融合
+```
+App icon, thumbs up and thumbs down icons merged back-to-back,
+gradient from warm orange to cool blue, dark background,
+bold flat design, minimalist, centered composition,
+professional mobile app icon, no text
+```
+
+#### 方向性C — 人物シルエット＋ハート
+```
+App icon, simple human silhouette centered,
+surrounded by split aura (warm pink-orange on right, cool blue-purple on left),
+small heart icon above, dark navy background,
+flat modern design, minimalist, no text, mobile app icon
+```
+
+#### 調整用追加プロンプト
+- より明るく: `vibrant colors, high contrast`
+- よりシンプルに: `ultra minimal, single symbol only`
+- 色を固定: `use #FF6B35 for like side, #4B9FE1 for dislike side`
+
+#### アイコンサイズ要件
+- iOS: 1024×1024px（App Store 提出用）
+- Android: 512×512px（Google Play 提出用）
+- `apps/mobile/assets/` に配置、`app.json` の `icon` フィールドで指定
 
 ---
 

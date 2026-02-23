@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo, useRef } from 'react'
 import {
   View,
   Text,
@@ -9,10 +9,12 @@ import {
   RefreshControl,
   SafeAreaView,
 } from 'react-native'
-import { useNavigation, useFocusEffect } from '@react-navigation/native'
+import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native'
+import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { colors } from '../../theme'
 import { getRanking } from '../../utils/sukikira'
 import PersonCard from '../../components/PersonCard/PersonCard'
+import { useSettings } from '../../contexts/SettingsContext'
 
 const TABS = [
   { key: 'like', label: '好感度' },
@@ -22,6 +24,14 @@ const TABS = [
 
 export default function Home() {
   const navigation = useNavigation()
+  const { voted, commentHistory } = useSettings()
+  const commentedNames = useMemo(
+    () => new Set(commentHistory.map(h => h.name)),
+    [commentHistory],
+  )
+  const flatListRef = useRef(null)
+  useScrollToTop(flatListRef)
+
   const [activeTab, setActiveTab] = useState('like')
   // { [type]: item[] }
   const [data, setData] = useState({})
@@ -93,6 +103,13 @@ export default function Home() {
             </Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity
+          style={styles.swipeBtn}
+          onPress={() => navigation.navigate('SwipeVote')}
+        >
+          <FontIcon name="random" color={colors.primary} size={15} />
+          <Text style={styles.swipeBtnLabel}>スワイプ</Text>
+        </TouchableOpacity>
       </View>
 
       {loading && items.length === 0 ? (
@@ -108,12 +125,15 @@ export default function Home() {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={items}
           keyExtractor={(item) => String(item.rank) + item.name}
           renderItem={({ item }) => (
             <PersonCard
               item={item}
               rank={item.rank}
+              votedType={voted[item.name]}
+              commented={commentedNames.has(item.name)}
               onPress={() => navigation.navigate('Details', { name: item.name, imageUrl: item.imageUrl })}
             />
           )}
@@ -197,5 +217,19 @@ const styles = StyleSheet.create({
   loadingMore: {
     paddingVertical: 20,
     alignItems: 'center',
+  },
+  swipeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.border,
+  },
+  swipeBtnLabel: {
+    color: colors.primary,
+    fontSize: 10,
+    fontWeight: '600',
   },
 })

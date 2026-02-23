@@ -5,6 +5,7 @@ import {
   Image,
   FlatList,
   ScrollView,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -14,6 +15,8 @@ import {
   Dimensions,
   Modal,
   TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native'
 import * as Haptics from 'expo-haptics'
@@ -37,7 +40,14 @@ export default function Details() {
   const route = useRoute()
   const { name, imageUrl: paramImageUrl } = route.params
 
-  const { voted, recordVote, isNgComment, cacheResult, getCachedResult, recordCommentVote, getCommentVoted } = useSettings()
+  const {
+    voted, recordVote, isNgComment,
+    cacheResult, getCachedResult,
+    recordCommentVote, getCommentVoted,
+    recordBrowse,
+    commentHistory,
+    bookmarkFolders, addBookmarkFolder, addToFolder, removeFromFolder,
+  } = useSettings()
   const voteStatus = voted[name]
 
   const [resultInfo, setResultInfo] = useState(null)
@@ -61,12 +71,45 @@ export default function Details() {
   // 全コメント（フィルタ前）への参照（アンカー解決用）
   const allCommentsRef = useRef([])
 
+  // スレ内検索
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // ブックマーク
+  const [bookmarkModalVisible, setBookmarkModalVisible] = useState(false)
+  const [newFolderInput, setNewFolderInput] = useState('')
+  const [addingNewFolder, setAddingNewFolder] = useState(false)
+  const isBookmarked = useMemo(
+    () => bookmarkFolders.some((f) => f.items.some((i) => i.name === name)),
+    [bookmarkFolders, name],
+  )
+  const closeBookmarkModal = () => {
+    setBookmarkModalVisible(false)
+    setAddingNewFolder(false)
+    setNewFolderInput('')
+  }
+  const handleAddNewFolder = () => {
+    if (!newFolderInput.trim()) return
+    addBookmarkFolder(newFolderInput.trim())
+    setNewFolderInput('')
+    setAddingNewFolder(false)
+  }
+
   // 表示する画像一覧
   const displayImages = useMemo(() => {
     if (resultInfo?.images?.length) return resultInfo.images
     const fallback = resultInfo?.imageUrl || paramImageUrl
     return fallback ? [fallback] : []
   }, [resultInfo, paramImageUrl])
+
+  // 自分が投稿したコメントID セット（この人物に限定）
+  const myCommentEntries = useMemo(() => {
+    return commentHistory.filter(h => h.name === name && h.commentId)
+  }, [commentHistory, name])
+
+  const myCommentIds = useMemo(() => {
+    return new Set(myCommentEntries.map(h => h.commentId))
+  }, [myCommentEntries])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -81,6 +124,7 @@ export default function Details() {
         allCommentsRef.current = cmts
         setNextCursor(cursor)
         cacheResult(name, info, cmts)
+        recordBrowse(name, info.imageUrl || paramImageUrl)
       } else {
         const cached = getCachedResult(name)
         if (cached) {
@@ -88,6 +132,9 @@ export default function Details() {
           setComments(cached.comments)
           allCommentsRef.current = cached.comments
           setNextCursor(null)
+          recordBrowse(name, cached.resultInfo?.imageUrl || paramImageUrl)
+        } else {
+          recordBrowse(name, paramImageUrl)
         }
       }
     } catch (e) {
@@ -112,7 +159,7 @@ export default function Details() {
       setComments(cmts)
       allCommentsRef.current = cmts
       setNextCursor(cursor)
-      recordVote(name, type)
+      recordVote(name, type, info.imageUrl || paramImageUrl)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       cacheResult(name, info, cmts)
     } catch (e) {
@@ -177,9 +224,10 @@ export default function Details() {
       if (filter !== 'all' && c.type !== filter) return false
       if (isNgComment(c.body)) return false
       if (hiddenIds.has(c.id)) return false
+      if (searchQuery && !c.body.includes(searchQuery)) return false
       return true
     })
-  }, [comments, filter, isNgComment, hiddenIds])
+  }, [comments, filter, isNgComment, hiddenIds, searchQuery])
 
   const ListHeader = () => (
     <View>
@@ -257,6 +305,7 @@ export default function Details() {
         </View>
       </View>
 
+      {/* フィルタバー */}
       <View style={styles.filterBar}>
         {FILTER_TABS.map((tab) => (
           <TouchableOpacity
@@ -274,6 +323,17 @@ export default function Details() {
             </Text>
           </TouchableOpacity>
         ))}
+        {/* 検索ボタン */}
+        <TouchableOpacity
+          style={[styles.filterIconBtn, searchOpen && styles.filterIconBtnActive]}
+          onPress={() => {
+            setSearchOpen(v => !v)
+            if (searchOpen) setSearchQuery('')
+          }}
+        >
+          <FontIcon name="search" color={searchOpen ? colors.primary : colors.textMuted} size={14} />
+        </TouchableOpacity>
+        {/* コメント投稿ボタン */}
         <TouchableOpacity
           style={styles.postBtn}
           onPress={() => navigation.navigate('Post', { name })}
@@ -281,6 +341,7 @@ export default function Details() {
           <FontIcon name="pencil" color={colors.primary} size={16} />
         </TouchableOpacity>
       </View>
+
     </View>
   )
 
@@ -291,8 +352,42 @@ export default function Details() {
           <FontIcon name="chevron-left" color={colors.text} size={18} />
         </TouchableOpacity>
         <Text style={styles.navTitle} numberOfLines={1}>{name}</Text>
-        <View style={styles.backBtn} />
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => setBookmarkModalVisible(true)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <FontIcon
+            name={isBookmarked ? 'bookmark' : 'bookmark-o'}
+            color={isBookmarked ? colors.primary : colors.text}
+            size={18}
+          />
+        </TouchableOpacity>
       </View>
+
+      {/* スレ内検索バー（FlatList の外に置くことでキーボードが閉じるバグを防ぐ） */}
+      {searchOpen && (
+        <View style={styles.searchBar}>
+          <FontIcon name="search" color={colors.textMuted} size={13} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="コメントを検索..."
+            placeholderTextColor={colors.textMuted}
+            autoFocus
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <FontIcon name="times-circle" color={colors.textMuted} size={14} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      {searchOpen && searchQuery.length > 0 && (
+        <Text style={styles.searchCount}>{filteredComments.length} 件ヒット</Text>
+      )}
 
       {loading && comments.length === 0 ? (
         <View style={styles.center}>
@@ -309,16 +404,30 @@ export default function Details() {
         <FlatList
           data={filteredComments}
           keyExtractor={(item, i) => item.id + i}
-          renderItem={({ item }) => (
-            <CommentItem
-              comment={item}
-              onVote={onCommentVote}
-              votedType={getCommentVoted(item.id)}
-              onAnchorTap={onAnchorTap}
-              onHide={() => onHide(item.id)}
-              onReply={() => onReply(item)}
-            />
-          )}
+          renderItem={({ item }) => {
+            const isMine = myCommentIds.has(item.id)
+            const isReplyToMe = !isMine && myCommentIds.size > 0 &&
+              [...myCommentIds].some(id => item.body.includes(`>>${id}`))
+            const histEntry = isMine
+              ? myCommentEntries.find(h => h.commentId === item.id)
+              : null
+            const upvoteChange = histEntry
+              ? Math.max(0, (item.upvoteCount ?? 0) - (histEntry.initialUpvotes ?? 0))
+              : 0
+            return (
+              <CommentItem
+                comment={item}
+                onVote={onCommentVote}
+                votedType={getCommentVoted(item.id)}
+                onAnchorTap={onAnchorTap}
+                onHide={() => onHide(item.id)}
+                onReply={() => onReply(item)}
+                isMine={isMine}
+                isReplyToMe={isReplyToMe}
+                upvoteChange={upvoteChange}
+              />
+            )
+          }}
           ListHeaderComponent={<ListHeader />}
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
@@ -341,7 +450,13 @@ export default function Details() {
           ListEmptyComponent={
             <View style={styles.emptyComments}>
               <Text style={styles.emptyText}>
-                {filter === 'all' ? 'コメントがありません' : `${filter === 'like' ? '好き派' : '嫌い派'}のコメントはありません`}
+                {searchQuery
+                  ? `「${searchQuery}」に一致するコメントがありません`
+                  : filter !== 'all'
+                  ? `${filter === 'like' ? '好き派' : '嫌い派'}のコメントはありません`
+                  : resultInfo === null
+                  ? '投票後にコメントを閲覧できます'
+                  : 'コメントがありません'}
               </Text>
             </View>
           }
@@ -433,6 +548,84 @@ export default function Details() {
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* ブックマークフォルダ選択モーダル */}
+      <Modal
+        visible={bookmarkModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeBookmarkModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoid}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+        <TouchableWithoutFeedback onPress={closeBookmarkModal}>
+          <View style={styles.overlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.bookmarkModal}>
+                <Text style={styles.bookmarkModalTitle}>ブックマーク</Text>
+
+                {bookmarkFolders.length === 0 && !addingNewFolder && (
+                  <Text style={styles.bookmarkEmpty}>フォルダがありません</Text>
+                )}
+
+                {bookmarkFolders.map((folder) => {
+                  const inFolder = folder.items.some((i) => i.name === name)
+                  return (
+                    <TouchableOpacity
+                      key={folder.id}
+                      style={styles.bookmarkFolderRow}
+                      onPress={() => {
+                        if (inFolder) removeFromFolder(folder.id, name)
+                        else addToFolder(folder.id, name, resultInfo?.imageUrl || paramImageUrl)
+                      }}
+                    >
+                      <FontIcon
+                        name={inFolder ? 'check-square' : 'square-o'}
+                        color={inFolder ? colors.primary : colors.textMuted}
+                        size={20}
+                      />
+                      <Text style={styles.bookmarkFolderName}>{folder.name}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+
+                {addingNewFolder ? (
+                  <View style={styles.bookmarkNewFolderRow}>
+                    <TextInput
+                      style={styles.bookmarkNewFolderInput}
+                      value={newFolderInput}
+                      onChangeText={setNewFolderInput}
+                      placeholder="フォルダ名..."
+                      placeholderTextColor={colors.textMuted}
+                      autoFocus
+                      returnKeyType="done"
+                      onSubmitEditing={handleAddNewFolder}
+                    />
+                    <TouchableOpacity onPress={handleAddNewFolder}>
+                      <Text style={styles.bookmarkNewFolderOk}>追加</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.bookmarkAddFolderBtn}
+                    onPress={() => setAddingNewFolder(true)}
+                  >
+                    <FontIcon name="plus" color={colors.primary} size={13} />
+                    <Text style={styles.bookmarkAddFolderText}>新規フォルダを作成</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity style={styles.bookmarkCloseBtn} onPress={closeBookmarkModal}>
+                  <Text style={styles.bookmarkCloseBtnText}>閉じる</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   )
@@ -570,10 +763,47 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '700',
   },
+  filterIconBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  filterIconBtnActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: colors.primary,
+  },
   postBtn: {
     marginLeft: 'auto',
     paddingHorizontal: 16,
     paddingVertical: 10,
+  },
+  // スレ内検索バー
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: 8,
+    backgroundColor: colors.card,
+  },
+  searchIcon: {
+    marginRight: 2,
+  },
+  searchInput: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  searchCount: {
+    color: colors.textMuted,
+    fontSize: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   center: {
     flex: 1,
@@ -677,5 +907,91 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 13,
     lineHeight: 20,
+  },
+  keyboardAvoid: {
+    flex: 1,
+  },
+  // ブックマークモーダル
+  bookmarkModal: {
+    width: '100%',
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 20,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  bookmarkModalTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  bookmarkEmpty: {
+    color: colors.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  bookmarkFolderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  bookmarkFolderName: {
+    color: colors.text,
+    fontSize: 15,
+  },
+  bookmarkNewFolderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  bookmarkNewFolderInput: {
+    flex: 1,
+    backgroundColor: colors.background,
+    color: colors.text,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
+  },
+  bookmarkNewFolderOk: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 14,
+    paddingHorizontal: 4,
+  },
+  bookmarkAddFolderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 12,
+  },
+  bookmarkAddFolderText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  bookmarkCloseBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  bookmarkCloseBtnText: {
+    color: colors.textSecondary,
+    fontWeight: '600',
+    fontSize: 14,
   },
 })

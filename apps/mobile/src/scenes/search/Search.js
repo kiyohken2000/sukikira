@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import {
   View,
   TextInput,
@@ -10,18 +10,36 @@ import {
   SafeAreaView,
   Keyboard,
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useScrollToTop } from '@react-navigation/native'
+import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { colors } from '../../theme'
 import { search } from '../../utils/sukikira'
 import PersonCard from '../../components/PersonCard/PersonCard'
+import { useSettings } from '../../contexts/SettingsContext'
 
 export default function Search() {
   const navigation = useNavigation()
+  const { voted, commentHistory } = useSettings()
+  const commentedNames = useMemo(
+    () => new Set(commentHistory.map(h => h.name)),
+    [commentHistory],
+  )
+  const flatListRef = useRef(null)
+  useScrollToTop(flatListRef)
+
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [searched, setSearched] = useState(false)
+
+  const onClear = () => {
+    setQuery('')
+    setResults([])
+    setError(null)
+    setSearched(false)
+    Keyboard.dismiss()
+  }
 
   const onSearch = async () => {
     if (!query.trim()) return
@@ -42,17 +60,24 @@ export default function Search() {
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.searchBar}>
-        <TextInput
-          style={styles.input}
-          value={query}
-          onChangeText={setQuery}
-          placeholder="人物名を検索..."
-          placeholderTextColor={colors.textMuted}
-          returnKeyType="search"
-          onSubmitEditing={onSearch}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={[styles.input, (query.length > 0 || searched) && styles.inputWithClear]}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="人物名を検索..."
+            placeholderTextColor={colors.textMuted}
+            returnKeyType="search"
+            onSubmitEditing={onSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {(query.length > 0 || searched) && (
+            <TouchableOpacity style={styles.clearBtn} onPress={onClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <FontIcon name="times-circle" color={colors.textMuted} size={16} />
+            </TouchableOpacity>
+          )}
+        </View>
         <TouchableOpacity style={styles.searchBtn} onPress={onSearch}>
           <Text style={styles.searchBtnText}>検索</Text>
         </TouchableOpacity>
@@ -68,11 +93,14 @@ export default function Search() {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={results}
           keyExtractor={(item, i) => item.name + i}
           renderItem={({ item }) => (
             <PersonCard
               item={item}
+              votedType={voted[item.name]}
+              commented={commentedNames.has(item.name)}
               onPress={() => navigation.navigate('Details', { name: item.name, imageUrl: item.imageUrl })}
             />
           )}
@@ -103,8 +131,12 @@ const styles = StyleSheet.create({
     margin: 12,
     gap: 8,
   },
-  input: {
+  inputWrapper: {
     flex: 1,
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  input: {
     backgroundColor: colors.card,
     color: colors.text,
     borderRadius: 8,
@@ -113,6 +145,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  inputWithClear: {
+    paddingRight: 36,
+  },
+  clearBtn: {
+    position: 'absolute',
+    right: 10,
   },
   searchBtn: {
     backgroundColor: colors.primary,

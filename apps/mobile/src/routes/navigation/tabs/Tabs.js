@@ -4,6 +4,8 @@ import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { colors } from '../../../theme'
 import { RankingStacks } from '../stacks/RankingStacks'
 import { SearchStacks } from '../stacks/SearchStacks'
+import { HistoryStacks } from '../stacks/HistoryStacks'
+import { BookmarkStacks } from '../stacks/BookmarkStacks'
 import { SettingsStacks } from '../stacks/SettingsStacks'
 
 const Tab = createBottomTabNavigator()
@@ -40,6 +42,26 @@ export default function TabNavigator() {
           tabBarLabel: '検索',
           tabBarIcon: ({ color, size }) => (
             <FontIcon name="search" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="HistoryTab"
+        component={HistoryStacks}
+        options={{
+          tabBarLabel: '履歴',
+          tabBarIcon: ({ color, size }) => (
+            <FontIcon name="clock-o" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="BookmarkTab"
+        component={BookmarkStacks}
+        options={{
+          tabBarLabel: 'ブックマーク',
+          tabBarIcon: ({ color, size }) => (
+            <FontIcon name="bookmark-o" color={color} size={size} />
           ),
         }}
       />

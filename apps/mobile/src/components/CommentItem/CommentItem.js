@@ -2,7 +2,10 @@ import React, { useState, useCallback } from 'react'
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
+  Modal,
   StyleSheet,
   ActionSheetIOS,
   Alert,
@@ -11,6 +14,7 @@ import {
 } from 'react-native'
 import * as Haptics from 'expo-haptics'
 import { colors } from '../../theme'
+import { useSettings } from '../../contexts/SettingsContext'
 
 // URL 検出正規表現
 const URL_REGEX = /https?:\/\/[^\s\u3000-\u9FFF\uFF00-\uFFEF]+/g
@@ -25,7 +29,6 @@ const parseBodySegments = (body) => {
   if (!body) return [{ type: 'text', text: '' }]
 
   const segments = []
-  // アンカー・URLのパターンをまとめて処理
   const combined = /(?:>>\d+)|(?:https?:\/\/[^\s\u3000-\u9FFF\uFF00-\uFFEF]+)/g
   let last = 0
   let m
@@ -57,6 +60,9 @@ const parseBodySegments = (body) => {
  * @param {(refId: string) => void} onAnchorTap
  * @param {() => void} onHide
  * @param {() => void} onReply
+ * @param {boolean} isMine — 自分が投稿したコメント
+ * @param {boolean} isReplyToMe — 自分のコメントへの返信
+ * @param {number} upvoteChange — いいね増加数（正の数のみ表示）
  */
 export default function CommentItem({
   comment,
@@ -65,10 +71,18 @@ export default function CommentItem({
   onAnchorTap,
   onHide,
   onReply,
+  isMine = false,
+  isReplyToMe = false,
+  upvoteChange = 0,
 }) {
+  const { addNgWord } = useSettings()
   const [voted, setVoted] = useState(votedType)
   const [likes, setLikes] = useState(comment.upvoteCount ?? 0)
   const [dislikes, setDislikes] = useState(comment.downvoteCount ?? 0)
+
+  // NGワード入力モーダル
+  const [ngModalVisible, setNgModalVisible] = useState(false)
+  const [ngInput, setNgInput] = useState('')
 
   const borderColor =
     comment.type === 'like'
@@ -86,18 +100,30 @@ export default function CommentItem({
     onVote?.(comment.id, type, comment.token)
   }
 
+  const openNgModal = useCallback(() => {
+    setNgInput(comment.body.slice(0, 40))
+    setNgModalVisible(true)
+  }, [comment.body])
+
+  const submitNgWord = useCallback(() => {
+    const w = ngInput.trim()
+    if (w) addNgWord(w)
+    setNgModalVisible(false)
+  }, [ngInput, addNgWord])
+
   const handleMenu = useCallback(() => {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['キャンセル', '返信', '非表示', '通報'],
+          options: ['キャンセル', '返信', '非表示', 'NGワード追加', '通報'],
           cancelButtonIndex: 0,
-          destructiveButtonIndex: 3,
+          destructiveButtonIndex: 4,
         },
         (idx) => {
           if (idx === 1) onReply?.()
           else if (idx === 2) onHide?.()
-          else if (idx === 3) {
+          else if (idx === 3) openNgModal()
+          else if (idx === 4) {
             Alert.alert('通報', `コメント #${comment.id} を通報しますか？`, [
               { text: 'キャンセル', style: 'cancel' },
               { text: '通報する', style: 'destructive', onPress: () => {} },
@@ -109,6 +135,7 @@ export default function CommentItem({
       Alert.alert('メニュー', undefined, [
         { text: '返信', onPress: () => onReply?.() },
         { text: '非表示', onPress: () => onHide?.() },
+        { text: 'NGワード追加', onPress: () => openNgModal() },
         {
           text: '通報',
           style: 'destructive',
@@ -121,7 +148,7 @@ export default function CommentItem({
         { text: 'キャンセル', style: 'cancel' },
       ])
     }
-  }, [comment.id, onReply, onHide])
+  }, [comment.id, onReply, onHide, openNgModal])
 
   const segments = parseBodySegments(comment.body)
   const hasVoteData = !!comment.token
@@ -139,6 +166,19 @@ export default function CommentItem({
             <Text style={styles.date}>{'  '}{comment.dateText}</Text>
           ) : null}
         </Text>
+        {/* バッジ */}
+        <View style={styles.badges}>
+          {isMine && (
+            <View style={styles.badgeMine}>
+              <Text style={styles.badgeMineText}>自分</Text>
+            </View>
+          )}
+          {isReplyToMe && !isMine && (
+            <View style={styles.badgeReply}>
+              <Text style={styles.badgeReplyText}>返信</Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity
           onPress={handleMenu}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -148,7 +188,7 @@ export default function CommentItem({
         </TouchableOpacity>
       </View>
 
-      {/* 本文 (アンカー・URLは色付きで表示) */}
+      {/* 本文 */}
       <Text style={styles.body}>
         {segments.map((seg, i) => {
           if (seg.type === 'anchor') {
@@ -186,10 +226,9 @@ export default function CommentItem({
             disabled={!!voted}
           >
             <Text style={[styles.voteCount, { color: voted === 'like' ? '#fff' : colors.like }]}>
-              ▲ {likes}
+              ▲ {likes}{upvoteChange > 0 && isMine ? ` (+${upvoteChange})` : ''}
             </Text>
           </TouchableOpacity>
-          {/* 比率バー */}
           <View style={styles.barTrack}>
             <View style={[styles.barLike, { flex: likePct }]} />
             <View style={[styles.barDislike, { flex: 100 - likePct }]} />
@@ -205,6 +244,50 @@ export default function CommentItem({
           </TouchableOpacity>
         </View>
       )}
+
+      {/* NGワード追加モーダル */}
+      <Modal
+        visible={ngModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNgModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setNgModalVisible(false)}>
+          <View style={styles.ngOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.ngCard}>
+                <Text style={styles.ngTitle}>NGワード追加</Text>
+                <Text style={styles.ngHint}>フィルタしたいキーワードを入力してください</Text>
+                <TextInput
+                  style={styles.ngInput}
+                  value={ngInput}
+                  onChangeText={setNgInput}
+                  autoFocus
+                  placeholder="キーワード"
+                  placeholderTextColor={colors.textMuted}
+                  returnKeyType="done"
+                  onSubmitEditing={submitNgWord}
+                />
+                <View style={styles.ngBtns}>
+                  <TouchableOpacity
+                    style={styles.ngBtnCancel}
+                    onPress={() => setNgModalVisible(false)}
+                  >
+                    <Text style={styles.ngBtnCancelText}>キャンセル</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.ngBtnAdd, !ngInput.trim() && styles.ngBtnDisabled]}
+                    onPress={submitNgWord}
+                    disabled={!ngInput.trim()}
+                  >
+                    <Text style={styles.ngBtnAddText}>追加</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   )
 }
@@ -239,6 +322,33 @@ const styles = StyleSheet.create({
   },
   date: {
     color: colors.textMuted,
+  },
+  badges: {
+    flexDirection: 'row',
+    gap: 4,
+    marginHorizontal: 4,
+  },
+  badgeMine: {
+    backgroundColor: colors.primary + '33',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  badgeMineText: {
+    fontSize: 10,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  badgeReply: {
+    backgroundColor: '#a78bfa33',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  badgeReplyText: {
+    fontSize: 10,
+    color: '#a78bfa',
+    fontWeight: '700',
   },
   menuBtn: {
     paddingLeft: 8,
@@ -307,5 +417,68 @@ const styles = StyleSheet.create({
   },
   barDislike: {
     backgroundColor: colors.dislike,
+  },
+  // NGワードモーダル
+  ngOverlay: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  ngCard: {
+    width: '100%',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 20,
+  },
+  ngTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  ngHint: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginBottom: 12,
+  },
+  ngInput: {
+    backgroundColor: colors.background,
+    color: colors.text,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 16,
+  },
+  ngBtns: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  ngBtnCancel: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  ngBtnCancelText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  ngBtnAdd: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  ngBtnDisabled: {
+    opacity: 0.4,
+  },
+  ngBtnAddText: {
+    color: colors.white,
+    fontWeight: '700',
+    fontSize: 14,
   },
 })

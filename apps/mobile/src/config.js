@@ -5,4 +5,6 @@ const dummyUser = {
   userName: 'abcdef'
 }
 
-export { dummyUser, isAutoLogin }
+const version = '1.0.0'
+
+export { dummyUser, isAutoLogin, version }

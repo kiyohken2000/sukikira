@@ -9,10 +9,12 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { colors } from '../../theme'
 import { useSettings } from '../../contexts/SettingsContext'
+import { version } from '../../config'
 
 export default function Settings() {
   const { ngWords, addNgWord, removeNgWord } = useSettings()
@@ -79,6 +81,20 @@ export default function Settings() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyText}>NGワードは登録されていません</Text>
+            </View>
+          }
+          ListFooterComponent={
+            <View style={styles.about}>
+              <View style={styles.aboutDivider} />
+              <Text style={styles.aboutSectionTitle}>このアプリについて</Text>
+              <Image
+                source={require('../../../assets/images/logo-lg.png')}
+                style={styles.aboutLogo}
+                resizeMode="contain"
+              />
+              <Text style={styles.aboutAppName}>スキキラ</Text>
+              <Text style={styles.aboutSubtitle}>for 好き嫌い.com</Text>
+              <Text style={styles.aboutVersion}>バージョン {version}</Text>
             </View>
           }
         />
@@ -173,5 +189,43 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.textMuted,
     fontSize: 13,
+  },
+  about: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 6,
+  },
+  aboutDivider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: colors.border,
+    marginBottom: 24,
+  },
+  aboutSectionTitle: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  aboutLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 18,
+    marginBottom: 8,
+  },
+  aboutAppName: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  aboutSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 12,
+  },
+  aboutVersion: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 4,
   },
 })
