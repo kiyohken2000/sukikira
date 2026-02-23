@@ -90,7 +90,7 @@ export default function Home() {
   const items = data[activeTab] ?? []
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.tabBar}>
         {TABS.map((tab) => (
           <TouchableOpacity

@@ -153,7 +153,7 @@ export default function History() {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>履歴</Text>
       </View>

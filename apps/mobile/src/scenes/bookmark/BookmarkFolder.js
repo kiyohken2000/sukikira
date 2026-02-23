@@ -39,7 +39,7 @@ export default function BookmarkFolder() {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.navHeader}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}

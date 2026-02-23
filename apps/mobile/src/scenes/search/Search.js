@@ -58,7 +58,7 @@ export default function Search() {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.searchBar}>
         <View style={styles.inputWrapper}>
           <TextInput

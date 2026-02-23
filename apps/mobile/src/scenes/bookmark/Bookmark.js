@@ -44,7 +44,7 @@ export default function Bookmark() {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>ブックマーク</Text>
         <TouchableOpacity
