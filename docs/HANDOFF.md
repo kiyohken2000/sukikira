@@ -79,10 +79,40 @@ NavigationContainer
 - **パーセント抽出**: `好き派:\s*(?:<[^>]+>)*([\d.]+)` （spanを読み飛ばす）
 - **票数抽出**: `好き派:[\s\S]{0,200}?([\d,]+)票`（{0,200} が必要）
 
-### Cookie・IPトラッキング
-- 結果ページ閲覧にはセッション Cookie が必要（投票すると Cookie がセットされる）
-- **IP ベースのトラッキングもある**: 一度投票した IP から `/people/vote/{name}` にアクセスすると `/people/result/{name}` へリダイレクトされる
+### Cookie・IPトラッキング（`scripts/analyze_vote_cookie.py` で実測済み）
+
+#### Cookie の構造
+- Cookie名: `sk_vote`、値: `1`（好き）/ `0`（嫌い）
+- **path が人物ごとに設定される**（グローバルではない）:
+  ```
+  /people/vote/{name}      （URLエンコード）
+  /people/vote/{id}/       （数値ID）
+  /people/result/{name}
+  /people/comment/{id}/
+  ```
+- **有効期限: 正確に24時間**（`Max-Age=86400`相当）
+- 投票ページ GET 時に `sk_vote=deleted`（既存Cookie削除）が送られた後、投票POST成功で新Cookie発行
+- `sk_tr` という2分間有効のCookieも発行される（CSRF対策トークン = `auth-r` の元と思われる）
+
+#### IPトラッキング
+- Cookieなし・同IP でも `/people/result/{name}` にアクセス可能（IPトラッキングで通過）
+- IP通過時もサーバーが**新たな24時間Cookieを再発行**する
+- Cookie + IP の二重管理
+
+#### 24時間以内の再投票（`scripts/analyze_revote.py` / `analyze_result_tokens.py` で実測済み）
+- Cookie有効中に `/people/vote/{name}` へアクセス → `/people/result/{name}` へリダイレクト
+- result ページに `auth1`/`auth2`/`auth-r` フィールドが存在するように見えるが、これらは**コメント投稿フォーム** (`/people/comment/{id}/`) のトークン。再投票フォームではない
+  - `auth-r` の値が `'n'`（リテラル文字列）など vote ページのトークンとは異なる
+  - `analyze_revote.py` の `tokens2_ok=True` はコメントフォームのトークンを誤検出していた
+- result ページのトークンを使って `/people/result/{name}` に POST しても **% 変化なし（サーバーが完全に無視）**
+- Cookie の値・有効期限も更新されない
+- → **24時間以内の上書き投票はサーバー側で完全ブロック**
+- アプリの `vote()` は `isResultPage` 判定でリダイレクトを検知しスキップするため整合している
+
+#### アプリへの影響
 - React Native の fetch は OS レベルの Cookie を自動管理（NSURLSession / OkHttp）
+- アプリの `voted` は人物ごとに24時間でリセット → **サーバー仕様と一致**
+- IPトラッキングにより、24h後もCookie切れ前に同IPからアクセスするとサーバー側は通過させる。アプリが「再投票できます」と促すのは正しいUX（修正不要と判断）
 
 ### コメント構造
 ```html
@@ -112,8 +142,24 @@ NavigationContainer
 - エンドポイント: `POST https://api.suki-kira.com/comment/vote?xdate={xdate}&evl={like|dislike}`
 - ボディ: `pid={pid_hash}&token={comment_token}`
 - `xdate` / `pid_hash` は結果ページHTMLのインラインJS変数 (`var xdate = "..."`, `var pid_hash = "..."`)
-- `token` は各コメントDivの `data-token` 属性
+- `token` は各コメントDivの `data-token` 属性（`cBanBtn` スパンの `data-token` と同一トークン）
 - Origin ヘッダーは `BASE_URL` (`https://suki-kira.com`) を使うこと（`BASE` は未定義）
+
+#### サーバーレスポンスの意味（`scripts/analyze_comment_revote.py` で実測済み）
+- `0` = 投票受け付け（新規）
+- `5` = 重複投票でブロック（同IPから同じコメントに再送/変更しようとした場合）
+- `10` = xdate が無効（古い・空文字・未来日時）
+- `11` = xdate がわずかにずれている（-1分程度）
+- `good→bad` 変更も `5` で拒否される。一度 good を押すと bad には変更不可
+- IPトラッキングによりサーバー側でも重複を管理（アプリの AsyncStorage 管理と二重）
+- → アプリは `AsyncStorage` に投票済み状態を保存しておけばよい（`@sukikira:commentVoted`）
+
+#### xdate の有効期限（`scripts/analyze_xdate.py` で実測済み）
+- xdate はサーバーで厳密に検証される。**-1分でも失敗（レスポンス `11`）**
+- ページを開いたまま放置してからコメント good/bad を押すとサイレント失敗する
+- **ただしウェブ版（`people-result.js`）も同じ設計**（`success: defer.resolve` でレスポンスボディを無視）
+- ウェブ版・アプリともに楽観的更新（先に UI を voted 状態にしてから AJAX）
+- → **修正不要。ウェブ版と同等の仕様として受け入れる**
 
 ### 人物詳細ページの追加情報
 - **複数画像**: `<img class="sk-result-img" src="...">` × 複数枚（gstatic.com）
@@ -139,7 +185,7 @@ NavigationContainer
 | キー | 内容 |
 |---|---|
 | `@sukikira:ngWords` | NGワード配列 `string[]` |
-| `@sukikira:voted` | 投票済みマップ `{ [name]: 'like' \| 'dislike' }` （投票済み判定用） |
+| `@sukikira:voted` | 投票済みマップ `{ [name]: { type: 'like'\|'dislike', votedAt: number } }` （人物ごと24h でリセット） |
 | `@sukikira:voteHistory` | 投票履歴 `Array<{ name, imageUrl, voteType, time }>` |
 | `@sukikira:browseHistory` | 閲覧履歴 `Array<{ name, imageUrl, time }>` |
 | `@sukikira:commentHistory` | コメント履歴 `Array<{ name, body, time }>` |
@@ -565,6 +611,11 @@ flat modern design, minimalist, no text, mobile app icon
 | `analyze_final_check.py` | isResultPage・parseResult・parseComments 統合確認 | `out/analyze_final_check.txt` |
 | `analyze_vote_fresh.py` | フレッシュ投票ページの構造確認 | `out/analyze_vote_fresh.txt` |
 | `analyze_vote_page_raw.py` | 投票ページの生HTMLとinputタグ一覧 | `out/analyze_vote_page_raw.txt` |
+| `analyze_vote_cookie.py` | Cookie構造・有効期限・IPトラッキング確認 | `out/analyze_vote_cookie.txt` |
+| `analyze_revote.py` | 24h以内の再投票ブロック確認（vote→result リダイレクト） | `out/analyze_revote.txt` |
+| `analyze_result_tokens.py` | result ページのトークン構造確認（コメントフォーム用と判明） | `out/analyze_result_tokens.txt` |
+| `analyze_comment_revote.py` | コメント good/bad の重複投票・変更制限確認 | `out/analyze_comment_revote.txt` |
+| `analyze_comment_vote.py` | コメントのいいねボタン HTML 構造確認 | `out/analyze_comment_vote.txt` |
 
 実行: `python scripts/<スクリプト名>` （プロジェクトルートから）
 Windows cp932 の絵文字エラーを避けるため、新スクリプトは stdout ではなくファイルのみに書き出す方式を使うこと。

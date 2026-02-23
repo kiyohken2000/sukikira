@@ -108,6 +108,28 @@
 
 ---
 
+## フェーズ7: 収益化（審査通過後）
+
+### 方針
+- 広告なし・完全無料を基本とする（suki-kira.com の広告収益を奪わないため）
+- 任意の寄付（Tip Jar）のみ実装
+
+### Tip Jar IAP
+- [ ] RevenueCat プロジェクト作成（既存アカウントに追加）
+- [ ] App Store Connect / Google Play Console で消耗型商品を登録
+  - ☕ コーヒー1杯おごる ¥120
+  - 🍱 ランチをおごる    ¥370
+  - 🎉 もっと応援する    ¥750
+- [ ] `react-native-purchases`（RevenueCat SDK）導入・EAS Build 対応
+- [ ] Settings 画面に「開発者を応援する」セクション追加
+
+### 注意事項
+- Buy Me a Coffee 等の外部決済リンクは日本向け App Store では禁止（2025年時点）
+- IAP は審査が別途必要（バイナリ更新＋再申請）
+- Apple 手数料: 売上 ¥100万未満なら 15%、以上なら 30%
+
+---
+
 ## 既知の課題・懸念事項
 
 | 課題 | 優先度 | 対応方針 |
@@ -129,3 +151,9 @@
 | 2026/02/23 | App Store・Google Play 両ストアに申請（審査中） |
 | 2026/02/23 | サブタイトルを「好き嫌い.com 非公式ブラウザ」→「for 好き嫌い.com」に変更 |
 | 2026/02/23 | SafeAreaView を react-native-safe-area-context に統一（Android ステータスバー被り修正） |
+| 2026/02/23 | Cookie仕様を実測調査（analyze_vote_cookie.py）：人物ごと24時間・IPトラッキングあり・アプリ実装と一致 |
+| 2026/02/23 | voted を人物ごと24時間でリセットする仕様に変更（SettingsContext.js） |
+| 2026/02/23 | 未投票・期限切れ時はコメント投稿画面へのナビゲートをブロック（Details.js） |
+| 2026/02/23 | result ページのトークンはコメント投稿フォーム用（再投票不可）と判明（analyze_result_tokens.py） |
+| 2026/02/23 | コメント good/bad：重複投票・good→bad 変更はサーバーがIPで拒否（レスポンス5）と判明（analyze_comment_revote.py） |
+| 2026/02/23 | xdate は1分でも古いと拒否されるが、ウェブ版も同じ設計（レスポンスボディ無視）のため修正不要と判断（analyze_xdate.py） |

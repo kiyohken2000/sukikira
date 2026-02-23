@@ -19,7 +19,8 @@
       "Bash(cd \"C:/Users/all/develop/expo/sukikira/apps/web\" && wrangler pages deploy dist --project-name sukikira 2>&1)",
       "Bash(cd \"C:/Users/all/develop/expo/sukikira/apps/web\" && npx wrangler pages deploy dist --project-name sukikira 2>&1)",
       "Bash(cd \"C:/Users/all/develop/expo/sukikira/apps/web\" && npx wrangler pages project create sukikira --production-branch main 2>&1)",
-      "Bash(cd \"C:/Users/all/develop/expo/sukikira/apps/web\" && npx wrangler pages deploy dist --project-name sukikira --commit-dirty=true 2>&1)"
+      "Bash(cd \"C:/Users/all/develop/expo/sukikira/apps/web\" && npx wrangler pages deploy dist --project-name sukikira --commit-dirty=true 2>&1)",
+      "WebSearch"
     ]
   }
 }
