@@ -3,46 +3,32 @@
  * 好き嫌い.com (suki-kira.com) へのリクエスト処理を全て集約する。
  * 仕様変更時の修正箇所をこのファイルのみに限定するため、
  * 他のファイルから直接 fetch しないこと。
+ *
+ * 注意: suki-kira.com の Cloudflare 設定により、カスタムヘッダー（User-Agent 等）を
+ * 付与した GET リクエストは空ボディを返す。GETリクエストにはヘッダーを付けないこと。
  */
 
 const BASE_URL = 'https://suki-kira.com'
-
-const HEADERS = {
-  'User-Agent':
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  'Accept-Language': 'ja-JP,ja;q=0.9',
-}
 
 // -----------------------------------------------------------------------
 // ユーティリティ
 // -----------------------------------------------------------------------
 
+// getComments が取得した投票フォーム HTML をキャッシュ（vote() で再利用）
+// 同じ URL を短時間に2回 fetch すると空ボディになる問題の回避策
+let _votePageCache = { name: null, html: null }
+
+/** GETリクエスト（ヘッダーなし — Cloudflare 対策） */
 const get = async (path) => {
   const url = `${BASE_URL}${path}`
-  console.log('[sukikira] GET', url)
-  const res = await fetch(url, { headers: HEADERS })
-  console.log('[sukikira] status', res.status, url)
+  const res = await fetch(url, { credentials: 'include' })
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${path}`)
-  const text = await res.text()
-  console.log('[sukikira] html preview:', text.substring(0, 500))
-  return text
+  return await res.text()
 }
 
-/** デバッグ用: 生HTMLをログに出力する */
-export const debugFetch = async (path = '/') => {
-  const html = await get(path)
-  console.log('[sukikira] FULL HTML LENGTH:', html.length)
-  // 500文字ずつ分割してログ出力（Expoログの文字数制限対策）
-  for (let i = 0; i < Math.min(html.length, 3000); i += 500) {
-    console.log(`[sukikira] HTML[${i}-${i + 500}]:`, html.substring(i, i + 500))
-  }
-  return html
-}
-
-/** encodeURIComponent の後に括弧を復元する（suki-kira.com は括弧をそのまま使う） */
+/** 人物名を URL パスに使える形式にエンコード */
 const encodeName = (name) =>
-  encodeURIComponent(name).replace(/%28/gi, '(').replace(/%29/gi, ')')
+  encodeURIComponent(name).replace(/\(/g, '%28').replace(/\)/g, '%29')
 
 /** input タグから name に対応する value を取得（属性順序不問） */
 const parseInputValue = (html, name) =>
@@ -71,13 +57,8 @@ const parseCommentTokens = (html) => ({
 // -----------------------------------------------------------------------
 // ランキング取得
 // GET https://suki-kira.com/ranking/{type}/
-// 専用ランキングページ（約20件）をパースして返す
 // -----------------------------------------------------------------------
 
-/**
- * @param {'like' | 'dislike' | 'trend'} type
- * @returns {Promise<Array<{rank: number, name: string, url: string, imageUrl: string, likePercent: string, dislikePercent: string}>>}
- */
 /**
  * @param {'like' | 'dislike' | 'trend'} type
  * @param {number} page - 1始まり
@@ -119,11 +100,9 @@ export const getRanking = async (type = 'like', page = 1) => {
 
   items.sort((a, b) => a.rank - b.rank)
 
-  // 次ページ判定: <link rel="next"> が存在すれば次ページあり
   const hasNext = /rel="next"/.test(html)
   const nextPage = hasNext ? page + 1 : null
 
-  console.log('[sukikira] getRanking type=%s page=%d count=%d nextPage=%s', type, page, items.length, nextPage)
   return { items, nextPage }
 }
 
@@ -144,20 +123,14 @@ export const search = async (query) => {
   const token = html.match(/sk_token\s*=\s*['"]([^'"]+)['"]/)?.[1] ?? ''
 
   // 2. JSON API から検索結果取得
-  const apiUrl = `${BASE_URL}/search/search?q=${q}${token ? `&sk_token=${token}` : ''}`
-  console.log('[sukikira] search API', apiUrl)
-  const res = await fetch(apiUrl, {
-    headers: {
-      ...HEADERS,
-      Accept: 'application/json, text/javascript, */*; q=0.01',
-      'X-Requested-With': 'XMLHttpRequest',
-      Referer: `${BASE_URL}/search?q=${q}`,
-    },
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}: /search/search`)
-  const json = await res.json()
+  // Cloudflare キャッシュバスト: タイムスタンプを付与して空レスポンスのキャッシュを回避
+  const apiUrl = `${BASE_URL}/search/search?q=${q}${token ? `&sk_token=${token}` : ''}&_t=${Date.now()}`
+  const apiRes = await fetch(apiUrl)
+  if (!apiRes.ok) throw new Error(`HTTP ${apiRes.status}: /search/search`)
+  const apiText = await apiRes.text()
+  if (!apiText || apiText === 'Invalid Token') throw new Error('検索サーバーが応答しません。しばらく時間をおいて再度お試しください')
+  const json = JSON.parse(apiText)
 
-  // people_result（完全一致）を先頭に、people_result_plus（類似）を後ろに並べる
   const people = [...(json.people_result ?? []), ...(json.people_result_plus ?? [])]
   const items = people.map((p) => ({
     name: p.name,
@@ -167,7 +140,6 @@ export const search = async (query) => {
     dislikePercent: '',
   }))
 
-  console.log('[sukikira] search count:', items.length)
   return items
 }
 
@@ -178,7 +150,6 @@ export const search = async (query) => {
 
 /**
  * @param {string} name - 人物名（URLエンコードなし）
- * @returns {Promise<{name: string, imageUrl: string, likePercent: string, dislikePercent: string, likeVotes: string, dislikeVotes: string}>}
  */
 export const getResult = async (name) => {
   const html = await get(`/people/result/${encodeName(name)}`)
@@ -186,29 +157,20 @@ export const getResult = async (name) => {
 }
 
 const parseResult = (html) => {
-  // 好き嫌い割合:
-  //   旧形式: "好き派: 29.91%(145445票)"
-  //   新形式: "好き派: <span itemprop="ratingValue">64.95</span>%<br><span>(379325票)</span>"
-  // → span タグを読み飛ばして数値を取得する
   const likePercent    = html.match(/好き派:\s*(?:<[^>]+>)*([\d.]+)/)?.[1] ?? '0'
   const dislikePercent = html.match(/嫌い派:\s*(?:<[^>]+>)*([\d.]+)/)?.[1] ?? '0'
-  // 票数: 新形式は "<br><span>(...票)</span>" のためラベルから200文字以内を検索
   const likeVotes      = html.match(/好き派:[\s\S]{0,200}?([\d,]+)票/)?.[1]?.replace(/,/g, '') ?? '0'
   const dislikeVotes   = html.match(/嫌い派:[\s\S]{0,200}?([\d,]+)票/)?.[1]?.replace(/,/g, '') ?? '0'
   const imageUrl = html.match(/property="og:image"[^>]*content="([^"]+)"/)?.[1] ?? ''
-  // 人物の複数画像: class="sk-result-img" の src を全て取得（&amp; をデコード）
   const imageMatches = [...html.matchAll(/<img[^>]*class="[^"]*sk-result-img[^"]*"[^>]*>/g)]
   const images = imageMatches
     .map(m => m[0].match(/src="([^"]+)"/)?.[1]?.replace(/&amp;/g, '&') ?? '')
     .filter(Boolean)
-  // タグ: class="tag-pill" の span テキストを取得
   const tags = [...html.matchAll(/<span[^>]*class="[^"]*tag-pill[^"]*"[^>]*>([^<]+)<\/span>/g)]
     .map(m => m[1].trim())
     .filter(Boolean)
-  // h1: "木村拓哉&nbsp;のこと、好き？嫌い？" → 名前だけ抜く
   const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? ''
   const name = h1.replace(/&nbsp;/g, ' ').replace(/<[^>]+>/g, '').replace(/のこと.*/, '').trim()
-  // コメント投票に必要なサーバー変数
   const xdate   = html.match(/var xdate\s*=\s*"([^"]+)"/)?.[1] ?? ''
   const pidHash = html.match(/var pid_hash\s*=\s*"([^"]+)"/)?.[1] ?? ''
   return { name, imageUrl, images, tags, likePercent, dislikePercent, likeVotes, dislikeVotes, xdate, pidHash }
@@ -221,31 +183,23 @@ const parseResult = (html) => {
 
 /**
  * @param {string} name
- * @returns {Promise<{resultInfo: object, comments: Array<{id: string, body: string, type: 'like'|'dislike'|'unknown'}>}>}
+ * @returns {Promise<{resultInfo: object, comments: Array, nextCursor: string|null, notFound?: boolean}>}
  */
 export const getComments = async (name) => {
-  // まず GET /people/result/ を試みる（投票済み=Cookie持ちなら結果ページが返る）
   const encodedName = encodeName(name)
-  const resultUrl = `${BASE_URL}/people/result/${encodedName}`
-  console.log('[sukikira] GET', resultUrl)
-  const resultRes = await fetch(resultUrl, { headers: HEADERS })
-  console.log('[sukikira] status', resultRes.status, 'finalUrl', resultRes.url)
-  if (!resultRes.ok) throw new Error(`HTTP ${resultRes.status}: /people/result/`)
-  const html = await resultRes.text()
+  const html = await get(`/people/result/${encodedName}`)
 
-  // /people/ 以外へリダイレクトされた場合 = suki-kira.com にページが存在しない
-  if (!resultRes.url.includes('/people/')) {
-    console.log('[sukikira] getComments: redirected to non-people page, person not found')
+  // 存在しない人物: トップページにリダイレクトされた場合
+  if (html && !html.includes('/people/') && !html.includes('好き派')) {
     return { resultInfo: null, comments: [], notFound: true }
   }
 
-  // result ページかどうかは「好き派:」の有無で判定
-  // 旧形式: "好き派: 29.91%"  新形式: "好き派: <span>64.95</span>%"
   const isResultPage = /好き派:/.test(html)
   if (!isResultPage) {
-    // Cookie なし（未投票状態）= vote ページが返ってきた
-    // → ダミー投票なしで結果を見る方法がないため空で返す
-    console.log('[sukikira] getComments: got vote page (not yet voted or no cookie)')
+    // 未投票 = vote ページが返ってきた → キャッシュして vote() で再利用
+    if (html && html.length > 100) {
+      _votePageCache = { name, html }
+    }
     return { resultInfo: null, comments: [] }
   }
 
@@ -255,35 +209,24 @@ export const getComments = async (name) => {
   return { resultInfo, comments, nextCursor }
 }
 
-/** ページネーションカーソル: ?nxc={id} のID部分を取得 */
+/** ページネーションカーソル */
 const parseNextCursor = (html) =>
   html.match(/\?nxc=(\d+)/)?.[1] ?? null
 
 /**
  * 追加コメントを取得（?nxc={cursor} ページネーション）
- * @param {string} name
- * @param {string} cursor - parseNextCursor で得たID
- * @returns {Promise<{comments: Array, nextCursor: string|null}>}
  */
 export const getMoreComments = async (name, cursor) => {
   const encodedName = encodeName(name)
-  const url = `${BASE_URL}/people/result/${encodedName}/?nxc=${cursor}`
-  console.log('[sukikira] getMoreComments', url)
-  const res = await fetch(url, { headers: HEADERS })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  if (!res.url.includes('/people/')) throw new Error('redirected away from people page')
-  const html = await res.text()
+  const html = await get(`/people/result/${encodedName}/?nxc=${cursor}`)
   if (!/好き派:/.test(html)) return { comments: [], nextCursor: null }
   const comments = parseComments(html)
   const nextCursor = parseNextCursor(html)
-  console.log('[sukikira] getMoreComments loaded=%d nextCursor=%s', comments.length, nextCursor)
   return { comments, nextCursor }
 }
 
 const parseComments = (html) => {
   const comments = []
-
-  // "comment-container c{id}" で split し各ブロックを処理（最後のコメントも欠落しない）
   const parts = html.split('<div class="comment-container c')
   for (let i = 1; i < parts.length; i++) {
     const idMatch = parts[i].match(/^(\d+)"/)
@@ -291,20 +234,13 @@ const parseComments = (html) => {
     const id = idMatch[1]
     const block = parts[i]
 
-    // タイプ: <meta itemprop="ratingValue" content="N"> 0=嫌い派 100=好き派
     const ratingMatch = block.match(/itemprop="ratingValue"[^>]*content\s*=\s*"(\d+)"/)
     const type = ratingMatch?.[1] === '100' ? 'like'
                : ratingMatch?.[1] === '0' ? 'dislike'
                : 'unknown'
 
-    // 投稿者名: <span itemprop="author">匿名@嫌い派</span>
     const author = block.match(/itemprop="author"[^>]*>([\s\S]*?)<\/span>/)?.[1]?.trim() ?? '匿名'
-
-    // 投稿日時: <span itemprop="datePublished" content="...">02-22 18:27</span>
     const dateText = block.match(/itemprop="datePublished"[^>]*>([^<]+)<\/span>/)?.[1]?.trim() ?? ''
-
-    // 本文: <p itemprop="reviewBody">...</p>
-    // アンカー <span class='anchor' data='NNN'>>>NNN</span> は >>NNN テキストとして保持
     const bodyMatch = block.match(/itemprop="reviewBody"[^>]*>([\s\S]*?)<\/p>/)
 
     let body = bodyMatch?.[1]
@@ -320,7 +256,6 @@ const parseComments = (html) => {
       .replace(/&[^;]+;/g, ' ')
       .trim() ?? ''
 
-    // itemprop が見つからない場合のフォールバック: comment_info div の後のテキストを取得
     if (!body) {
       const afterInfo = block.replace(/[\s\S]*class="[^"]*comment_info[^"]*"[^>]*>[\s\S]*?<\/div>/, '')
       body = afterInfo
@@ -332,7 +267,6 @@ const parseComments = (html) => {
         .slice(0, 500)
     }
 
-    // good/bad 投票データ
     const upvoteCount   = parseInt(block.match(/itemprop="upvoteCount"[^>]*content="(\d+)"/)?.[1] ?? '0', 10)
     const downvoteCount = parseInt(block.match(/itemprop="downvoteCount"[^>]*content="(\d+)"/)?.[1] ?? '0', 10)
     const token = block.match(/data-token="([^"]+)"/)?.[1] ?? ''
@@ -340,11 +274,6 @@ const parseComments = (html) => {
     if (body) comments.push({ id, body, type, upvoteCount, downvoteCount, token, author, dateText })
   }
 
-  console.log('[sukikira] parsed comments:', comments.length, 'types:', {
-    like: comments.filter(c => c.type === 'like').length,
-    dislike: comments.filter(c => c.type === 'dislike').length,
-    unknown: comments.filter(c => c.type === 'unknown').length,
-  })
   return comments
 }
 
@@ -355,39 +284,33 @@ const parseComments = (html) => {
 /**
  * @param {string} name
  * @param {'like' | 'dislike'} voteType
- * @returns {Promise<{likePercent: string, dislikePercent: string, likeVotes: string, dislikeVotes: string}>}
+ * @returns {Promise<{resultInfo: object, comments: Array, nextCursor: string|null}>}
  */
 export const vote = async (name, voteType) => {
-  // 1. フォームトークン取得
-  //    fetch を直接呼び出してリダイレクト先 URL を確認する
   const encodedName = encodeName(name)
-  const voteUrl = `${BASE_URL}/people/vote/${encodedName}`
-  console.log('[sukikira] GET', voteUrl)
-  const voteRes = await fetch(voteUrl, { headers: HEADERS })
-  console.log('[sukikira] status', voteRes.status, 'finalUrl', voteRes.url)
-  if (!voteRes.ok) throw new Error(`HTTP ${voteRes.status}: /people/vote/`)
-  const pageHtml = await voteRes.text()
+  let pageHtml = ''
 
-  // /people/ 以外へリダイレクトされた場合 = suki-kira.com にページが存在しない
-  if (!voteRes.url.includes('/people/')) {
-    throw new Error('この人物の投票ページが存在しません')
+  // getComments がキャッシュした vote ページ HTML を優先的に使う
+  if (_votePageCache.name === name && _votePageCache.html && _votePageCache.html.length > 100) {
+    pageHtml = _votePageCache.html
+    _votePageCache = { name: null, html: null }
+  } else {
+    _votePageCache = { name: null, html: null }
+    pageHtml = await get(`/people/vote/${encodedName}`)
+  }
+
+  // 結果ページが返った場合（既投票済み）
+  if (/好き派:/.test(pageHtml)) {
+    return { resultInfo: parseResult(pageHtml), comments: parseComments(pageHtml) }
   }
 
   const { id, auth1, auth2, authR } = parseVoteTokens(pageHtml)
 
   if (!id || !auth1 || !auth2 || !authR) {
-    // IPやCookieトラッキングで /people/result/ にリダイレクトされた場合、
-    // 結果ページが返っているならそのまま使う（既投票済みとして扱う）
-    const isResult = /好き派:/.test(pageHtml)
-    if (isResult) {
-      console.log('[sukikira] vote: redirected to result page, returning result directly')
-      return { resultInfo: parseResult(pageHtml), comments: parseComments(pageHtml) }
-    }
     throw new Error('投票トークンの取得に失敗しました')
   }
-  console.log('[sukikira] vote: tokens ok, posting vote type=%s id=%s', voteType, id)
 
-  // 2. 投票POST
+  // 投票POST
   const body = new URLSearchParams({
     vote: voteType === 'like' ? '1' : '0',
     ok: 'ng',
@@ -397,22 +320,30 @@ export const vote = async (name, voteType) => {
     'auth-r': authR,
   }).toString()
 
-  const res = await fetch(`${BASE_URL}/people/result/${encodeName(name)}`, {
+  const res = await fetch(`${BASE_URL}/people/result/${encodedName}`, {
     method: 'POST',
     headers: {
-      ...HEADERS,
       'Content-Type': 'application/x-www-form-urlencoded',
       Origin: BASE_URL,
-      Referer: `${BASE_URL}/people/vote/${encodeName(name)}`,
+      Referer: `${BASE_URL}/people/vote/${encodedName}`,
     },
     body,
   })
   if (!res.ok) throw new Error(`投票POST失敗: HTTP ${res.status}`)
   const html = await res.text()
-  const resultInfo = parseResult(html)
-  const comments = parseComments(html)
-  const nextCursor = parseNextCursor(html)
-  return { resultInfo, comments, nextCursor }
+
+  // POSTレスポンスに結果が含まれていればそのまま返す
+  if (html && /好き派:/.test(html)) {
+    return { resultInfo: parseResult(html), comments: parseComments(html), nextCursor: parseNextCursor(html) }
+  }
+
+  // POSTレスポンスが空の場合、結果ページを再取得（投票済みなので result ページが返る）
+  const fallbackHtml = await get(`/people/result/${encodedName}`)
+  if (/好き派:/.test(fallbackHtml)) {
+    return { resultInfo: parseResult(fallbackHtml), comments: parseComments(fallbackHtml), nextCursor: parseNextCursor(fallbackHtml) }
+  }
+
+  return { resultInfo: null, comments: [], nextCursor: null }
 }
 
 // -----------------------------------------------------------------------
@@ -432,7 +363,6 @@ export const voteComment = async (pidHash, commentId, voteType, token, xdate) =>
   const res = await fetch(url, {
     method: 'POST',
     headers: {
-      ...HEADERS,
       'Content-Type': 'application/x-www-form-urlencoded',
       Origin: BASE_URL,
     },
@@ -452,7 +382,6 @@ export const voteComment = async (pidHash, commentId, voteType, token, xdate) =>
  * @returns {Promise<{resultInfo: object, comments: Array}>}
  */
 export const postComment = async (name, commentBody, commentType = '1') => {
-  // 1. フォームトークン取得（結果ページから）
   const pageHtml = await get(`/people/result/${encodeName(name)}`)
   const { action, id, sum, tagId, auth1, auth2 } = parseCommentTokens(pageHtml)
 
@@ -460,8 +389,6 @@ export const postComment = async (name, commentBody, commentType = '1') => {
     throw new Error('コメントフォームトークンの取得に失敗しました')
   }
 
-  // 2. コメント投稿POST
-  // type: '1'=好き派, '0'=嫌い派 (サーバーは空文字列を無視する)
   const body = new URLSearchParams({
     id,
     name_id: '',
@@ -479,7 +406,6 @@ export const postComment = async (name, commentBody, commentType = '1') => {
   const res = await fetch(`${BASE_URL}${action}`, {
     method: 'POST',
     headers: {
-      ...HEADERS,
       'Content-Type': 'application/x-www-form-urlencoded',
       Origin: BASE_URL,
       Referer: `${BASE_URL}/people/result/${encodeName(name)}`,
@@ -487,7 +413,6 @@ export const postComment = async (name, commentBody, commentType = '1') => {
     body,
   })
   if (!res.ok) throw new Error(`コメント投稿失敗: HTTP ${res.status}`)
-  // レスポンスHTML（リダイレクト後の結果ページ）からコメント一覧を返す
   const html = await res.text()
   const resultInfo = parseResult(html)
   const comments = parseComments(html)
