@@ -136,6 +136,15 @@
       pointer-events: none;
     }
     .btn-icon { font-size: 20px; }
+    .btn-badge img {
+      height: 48px;
+      display: block;
+    }
+    .btn-badge-disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
 
     /* ─── スクリーンショット（ヒーロー下） ─── */
     .hero-screenshots {
@@ -321,11 +330,11 @@
       ランキング・投票・コメント・ブックマークをスマートフォンで。
     </p>
     <div class="btn-group">
-      <a class="btn btn-primary btn-disabled" href="#">
-        <span class="btn-icon">📱</span> App Store（近日公開）
+      <a class="btn-badge" href="https://apps.apple.com/jp/app/id6759544300" target="_blank" rel="noopener noreferrer">
+        <img src="images/badges/appstore.png" alt="App Storeからダウンロード" />
       </a>
-      <a class="btn btn-secondary btn-disabled" href="#">
-        <span class="btn-icon">🤖</span> Google Play（近日公開）
+      <a class="btn-badge btn-badge-disabled" href="https://play.google.com/store/apps/details?id=net.votepurchase.sukikira" target="_blank" rel="noopener noreferrer">
+        <img src="images/badges/googleplay.png" alt="Google Playで手に入れよう" />
       </a>
     </div>
 
