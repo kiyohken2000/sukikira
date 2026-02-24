@@ -229,3 +229,4 @@
 | 2026/02/24 | App Store 審査リジェクト: Guideline 1.2（EULA）+ Guideline 1.5（Support URL）の2点指摘 |
 | 2026/02/24 | App Store 公開完了 |
 | 2026/02/24 | Google Play 公開完了 |
+| 2026/02/24 | 括弧付き人物名バグ修正: getRanking の name 取得元を h2 テキスト→href デコードに変更（analyze_parentheses*.py で調査） |

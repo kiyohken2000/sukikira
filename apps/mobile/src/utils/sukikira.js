@@ -40,6 +40,10 @@ export const debugFetch = async (path = '/') => {
   return html
 }
 
+/** encodeURIComponent の後に括弧を復元する（suki-kira.com は括弧をそのまま使う） */
+const encodeName = (name) =>
+  encodeURIComponent(name).replace(/%28/gi, '(').replace(/%29/gi, ')')
+
 /** input タグから name に対応する value を取得（属性順序不問） */
 const parseInputValue = (html, name) =>
   html.match(new RegExp(`name="${name}"[^>]*value="([^"]+)"`))?.[1] ??
@@ -91,10 +95,9 @@ export const getRanking = async (type = 'like', page = 1) => {
   let cm
   while ((cm = cardRegex.exec(html)) !== null) {
     const block = cm[1]
-    const nameMatch = block.match(/class="[^"]*ranking-name[^"]*"[^>]*>\s*<a[^>]*>([^<]+)<\/a>/)
-    const name = nameMatch?.[1]?.trim() ?? ''
-    if (!name) continue
     const url = block.match(/href="(\/people\/vote\/[^"]+)"/)?.[1] ?? ''
+    const name = url ? decodeURIComponent(url.replace('/people/vote/', '')) : (block.match(/class="[^"]*ranking-name[^"]*"[^>]*>\s*<a[^>]*>([^<]+)<\/a>/)?.[1]?.trim() ?? '')
+    if (!name) continue
     const imageUrl = block.match(/data-src="(https?:\/\/[^"]+)"/)?.[1]
                   ?? block.match(/src="(https?:\/\/(?!suki-kira)[^"]+)"/)?.[1] ?? ''
     items.push({ rank: items.length + 1, name, url, imageUrl, likePercent: '', dislikePercent: '' })
@@ -105,10 +108,9 @@ export const getRanking = async (type = 'like', page = 1) => {
   let sm
   while ((sm = sectionRegex.exec(html)) !== null) {
     const block = sm[1]
-    const nameMatch = block.match(/<h2[^>]*class="title"[^>]*>([^<]+)<\/h2>/)
-    const name = nameMatch?.[1]?.trim() ?? ''
-    if (!name) continue
     const url = block.match(/href="(\/people\/vote\/[^"]+)"/)?.[1] ?? ''
+    const name = url ? decodeURIComponent(url.replace('/people/vote/', '')) : (block.match(/<h2[^>]*class="title"[^>]*>([^<]+)<\/h2>/)?.[1]?.trim() ?? '')
+    if (!name) continue
     const imageUrl = block.match(/data-src="(https?:\/\/[^"]+)"/)?.[1] ?? ''
     const rankMatch = block.match(/<p class="num">(\d+)<\/p>/)
     const rank = rankMatch ? parseInt(rankMatch[1], 10) : items.length + 1
@@ -159,7 +161,7 @@ export const search = async (query) => {
   const people = [...(json.people_result ?? []), ...(json.people_result_plus ?? [])]
   const items = people.map((p) => ({
     name: p.name,
-    url: `/people/vote/${encodeURIComponent(p.name)}`,
+    url: `/people/vote/${encodeName(p.name)}`,
     imageUrl: p.image?.replace(/&amp;/g, '&') ?? '',
     likePercent: '',
     dislikePercent: '',
@@ -179,7 +181,7 @@ export const search = async (query) => {
  * @returns {Promise<{name: string, imageUrl: string, likePercent: string, dislikePercent: string, likeVotes: string, dislikeVotes: string}>}
  */
 export const getResult = async (name) => {
-  const html = await get(`/people/result/${encodeURIComponent(name)}`)
+  const html = await get(`/people/result/${encodeName(name)}`)
   return parseResult(html)
 }
 
@@ -223,7 +225,7 @@ const parseResult = (html) => {
  */
 export const getComments = async (name) => {
   // まず GET /people/result/ を試みる（投票済み=Cookie持ちなら結果ページが返る）
-  const encodedName = encodeURIComponent(name)
+  const encodedName = encodeName(name)
   const resultUrl = `${BASE_URL}/people/result/${encodedName}`
   console.log('[sukikira] GET', resultUrl)
   const resultRes = await fetch(resultUrl, { headers: HEADERS })
@@ -264,7 +266,7 @@ const parseNextCursor = (html) =>
  * @returns {Promise<{comments: Array, nextCursor: string|null}>}
  */
 export const getMoreComments = async (name, cursor) => {
-  const encodedName = encodeURIComponent(name)
+  const encodedName = encodeName(name)
   const url = `${BASE_URL}/people/result/${encodedName}/?nxc=${cursor}`
   console.log('[sukikira] getMoreComments', url)
   const res = await fetch(url, { headers: HEADERS })
@@ -358,7 +360,7 @@ const parseComments = (html) => {
 export const vote = async (name, voteType) => {
   // 1. フォームトークン取得
   //    fetch を直接呼び出してリダイレクト先 URL を確認する
-  const encodedName = encodeURIComponent(name)
+  const encodedName = encodeName(name)
   const voteUrl = `${BASE_URL}/people/vote/${encodedName}`
   console.log('[sukikira] GET', voteUrl)
   const voteRes = await fetch(voteUrl, { headers: HEADERS })
@@ -395,13 +397,13 @@ export const vote = async (name, voteType) => {
     'auth-r': authR,
   }).toString()
 
-  const res = await fetch(`${BASE_URL}/people/result/${encodeURIComponent(name)}`, {
+  const res = await fetch(`${BASE_URL}/people/result/${encodeName(name)}`, {
     method: 'POST',
     headers: {
       ...HEADERS,
       'Content-Type': 'application/x-www-form-urlencoded',
       Origin: BASE_URL,
-      Referer: `${BASE_URL}/people/vote/${encodeURIComponent(name)}`,
+      Referer: `${BASE_URL}/people/vote/${encodeName(name)}`,
     },
     body,
   })
@@ -451,7 +453,7 @@ export const voteComment = async (pidHash, commentId, voteType, token, xdate) =>
  */
 export const postComment = async (name, commentBody, commentType = '1') => {
   // 1. フォームトークン取得（結果ページから）
-  const pageHtml = await get(`/people/result/${encodeURIComponent(name)}`)
+  const pageHtml = await get(`/people/result/${encodeName(name)}`)
   const { action, id, sum, tagId, auth1, auth2 } = parseCommentTokens(pageHtml)
 
   if (!action || !id) {
@@ -480,7 +482,7 @@ export const postComment = async (name, commentBody, commentType = '1') => {
       ...HEADERS,
       'Content-Type': 'application/x-www-form-urlencoded',
       Origin: BASE_URL,
-      Referer: `${BASE_URL}/people/result/${encodeURIComponent(name)}`,
+      Referer: `${BASE_URL}/people/result/${encodeName(name)}`,
     },
     body,
   })

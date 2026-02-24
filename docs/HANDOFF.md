@@ -273,6 +273,7 @@ const getCommentVoted = useCallback((commentId) => commentVotedRef.current[comme
 | コメント good/bad が常に失敗 | `voteComment` 内で `Origin: BASE`（未定義変数） | `sukikira.js` → `Origin: BASE_URL` |
 | 存在しない人物を投票すると「投票に失敗しました」 | `/people/vote/{name}` がトップページへリダイレクト → トークンなし・result 判定も false | `vote()` / `getComments()` で `response.url` チェックを追加 |
 | コメント good/bad を押して詳細を開き直すと未投票に戻る | `CommentItem` の `voted` state がローカルなため再マウント時リセット | `SettingsContext` に `commentVotedRef` 追加、`votedType` prop で初期化 |
+| 括弧付き人物名（田中瞳 (アナウンサー) 等）がランキングから開けない | `getRanking` が h2 テキスト（括弧なし表示名）から name を取得していたが、サーバーは href パス（括弧付き正式名）を使用 | `sukikira.js` `getRanking` で name を href からデコードして取得するよう変更 |
 
 ### 新機能
 
