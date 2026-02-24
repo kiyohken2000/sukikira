@@ -3,12 +3,25 @@ import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native'
 import { colors } from '../../theme'
 import VoteBar from '../VoteBar/VoteBar'
 
+const TWO_HOURS = 2 * 60 * 60 * 1000
+
+function formatRemaining(ms) {
+  if (ms <= 0 || ms >= TWO_HOURS) return null
+  const totalMin = Math.ceil(ms / 60000)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  if (h > 0) return `あと${h}時間${m}分`
+  return `あと${m}分`
+}
+
 /**
  * 人物カード（ランキング・検索結果共通）
  * @param {'like'|'dislike'|undefined} votedType — 投票済み種別
  * @param {boolean} commented — コメント投稿済み
+ * @param {number|undefined} remainingMs — 再投票までの残りms
  */
-export default function PersonCard({ item, onPress, rank, votedType, commented }) {
+export default function PersonCard({ item, onPress, rank, votedType, commented, remainingMs }) {
+  const remainingText = remainingMs != null ? formatRemaining(remainingMs) : null
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       {rank !== undefined && (
@@ -39,6 +52,9 @@ export default function PersonCard({ item, onPress, rank, votedType, commented }
           <View style={[styles.badge, styles.commentedBadge]}>
             <Text style={styles.badgeText}>コメ済</Text>
           </View>
+        )}
+        {remainingText && (
+          <Text style={styles.remainingText}>{remainingText}</Text>
         )}
       </View>
     </TouchableOpacity>
@@ -112,5 +128,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.text,
+  },
+  remainingText: {
+    fontSize: 10,
+    color: colors.textSecondary,
   },
 })

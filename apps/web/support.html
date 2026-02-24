@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>サポート - スキキラ</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="images/apple-touch-icon.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0a;
+      --card: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #e5e5e5;
+      --text-secondary: #888;
+      --text-muted: #555;
+      --primary: #f97316;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      line-height: 1.8;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10,10,10,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .back-link {
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .back-link:hover { opacity: 0.8; }
+    .header-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 60px 24px 80px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 48px;
+    }
+
+    section {
+      margin-bottom: 40px;
+    }
+    h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .faq-item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 12px;
+    }
+    .faq-q {
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .faq-q::before {
+      content: 'Q. ';
+      color: var(--primary);
+    }
+    .faq-a {
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .contact-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-top: 12px;
+    }
+    .contact-card p {
+      margin-bottom: 4px;
+    }
+    .contact-card a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .contact-card a:hover { opacity: 0.8; }
+
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center;
+      padding: 32px 24px;
+    }
+    footer p {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    footer a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 12px;
+    }
+    footer a:hover { color: var(--primary); }
+    .footer-links { margin-top: 8px; }
+    .footer-links a { margin: 0 8px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <a class="back-link" href="index.html">&larr; トップへ</a>
+    <span class="header-title">サポート</span>
+  </header>
+
+  <main>
+    <h1>サポート</h1>
+    <p class="subtitle">スキキラの使い方やよくある質問をまとめています。</p>
+
+    <section>
+      <h2>よくある質問（FAQ）</h2>
+
+      <div class="faq-item">
+        <div class="faq-q">スキキラとは何ですか？</div>
+        <div class="faq-a">
+          好き嫌い.com（suki-kira.com）を快適に閲覧・利用するための非公式ブラウザアプリです。
+          ランキング閲覧、投票、コメント投稿、ブックマーク管理などの機能を備えています。
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">投票はどうやって行いますか？</div>
+        <div class="faq-a">
+          人物の詳細画面で「好き」または「嫌い」ボタンをタップして投票できます。
+          また、スワイプ投票機能を使えば、カードを左右にスワイプするだけで快速に投票できます。
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">コメントはどのように投稿できますか？</div>
+        <div class="faq-a">
+          人物の詳細画面下部にある「コメント投稿」ボタンから投稿画面に移動できます。
+          投票済みの場合、投票した派閥（好き派/嫌い派）としてコメントが投稿されます。
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">投票は1日1回ですか？</div>
+        <div class="faq-a">
+          はい。同じ人物への投票は24時間に1回までとなっています。
+          これは好き嫌い.com のサーバー側の制限です。
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">不適切なコメントを見つけた場合はどうすればいいですか？</div>
+        <div class="faq-a">
+          コメントの「bad」ボタンで低評価できます。また、NGワード機能（設定画面）を使って
+          特定のキーワードを含むコメントを非表示にすることもできます。
+          悪質なコンテンツについては、下記のお問い合わせ先までご報告ください。
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">データはどこに保存されますか？</div>
+        <div class="faq-a">
+          投票履歴・閲覧履歴・ブックマーク・NGワードなどのデータはすべて端末内にのみ保存されます。
+          外部サーバーへの送信は一切行いません。アプリをアンインストールするとすべてのデータが削除されます。
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">好き嫌い.com の公式アプリですか？</div>
+        <div class="faq-a">
+          いいえ。スキキラは好き嫌い.com の非公式アプリです。
+          好き嫌い.com およびその運営者とは一切関係がありません。
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>お問い合わせ</h2>
+      <p>
+        上記で解決しない問題や、不具合の報告、不適切なコンテンツの報告は以下までご連絡ください。
+      </p>
+      <div class="contact-card">
+        <p>メールアドレス</p>
+        <a href="mailto:retwpay@gmail.com">retwpay@gmail.com</a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2025 スキキラ</p>
+    <div class="footer-links">
+      <a href="index.html">トップ</a>
+      <a href="terms.html">利用規約</a>
+      <a href="privacy.html">プライバシーポリシー</a>
+    </div>
+  </footer>
+
+</body>
+</html>

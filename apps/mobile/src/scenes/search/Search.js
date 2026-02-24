@@ -17,9 +17,18 @@ import { search } from '../../utils/sukikira'
 import PersonCard from '../../components/PersonCard/PersonCard'
 import { useSettings } from '../../contexts/SettingsContext'
 
+const VOTE_EXPIRE_MS = 24 * 60 * 60 * 1000 // 24時間
+
+function getRemainingMs(getVotedAt, name) {
+  const votedAt = getVotedAt(name)
+  if (!votedAt) return undefined
+  const remaining = votedAt + VOTE_EXPIRE_MS - Date.now()
+  return remaining > 0 ? remaining : undefined
+}
+
 export default function Search() {
   const navigation = useNavigation()
-  const { voted, commentHistory } = useSettings()
+  const { voted, commentHistory, getVotedAt } = useSettings()
   const commentedNames = useMemo(
     () => new Set(commentHistory.map(h => h.name)),
     [commentHistory],
@@ -101,6 +110,7 @@ export default function Search() {
               item={item}
               votedType={voted[item.name]}
               commented={commentedNames.has(item.name)}
+              remainingMs={getRemainingMs(getVotedAt, item.name)}
               onPress={() => navigation.navigate('Details', { name: item.name, imageUrl: item.imageUrl })}
             />
           )}

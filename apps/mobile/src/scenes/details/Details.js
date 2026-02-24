@@ -26,8 +26,98 @@ import { getComments, getMoreComments, vote, voteComment } from '../../utils/suk
 import { useSettings } from '../../contexts/SettingsContext'
 import CommentItem from '../../components/CommentItem/CommentItem'
 import VoteBar from '../../components/VoteBar/VoteBar'
+import { scheduleVoteNotification, cancelVoteNotification } from '../../utils/notification'
 
 const IMG_SIZE = 100
+const VOTE_EXPIRE_MS = 24 * 60 * 60 * 1000 // 24時間
+
+function CountdownText({ name }) {
+  const { getVotedAt, isNotifyEnabled, setNotifyEnabled, getNotifyId, setNotifyId } = useSettings()
+  const [remaining, setRemaining] = useState(() => {
+    const votedAt = getVotedAt(name)
+    if (!votedAt) return -1
+    return Math.max(0, votedAt + VOTE_EXPIRE_MS - Date.now())
+  })
+  const [notifyOn, setNotifyOn] = useState(() => isNotifyEnabled(name))
+
+  useFocusEffect(
+    useCallback(() => {
+      const update = () => {
+        const votedAt = getVotedAt(name)
+        if (!votedAt) { setRemaining(-1); return }
+        setRemaining(Math.max(0, votedAt + VOTE_EXPIRE_MS - Date.now()))
+      }
+      update()
+      const id = setInterval(update, 60000)
+      return () => clearInterval(id)
+    }, [name, getVotedAt]),
+  )
+
+  const toggleNotify = useCallback(async () => {
+    if (notifyOn) {
+      // OFF にする — スケジュール済み通知をキャンセル
+      const existingId = getNotifyId(name)
+      await cancelVoteNotification(existingId)
+      setNotifyId(name, null)
+      setNotifyEnabled(name, false)
+      setNotifyOn(false)
+    } else {
+      // ON にする — 通知をスケジュール
+      const votedAt = getVotedAt(name)
+      if (!votedAt) return
+      const id = await scheduleVoteNotification(name, votedAt)
+      if (id) {
+        setNotifyId(name, id)
+        setNotifyEnabled(name, true)
+        setNotifyOn(true)
+      }
+    }
+  }, [notifyOn, name, getVotedAt, getNotifyId, setNotifyId, setNotifyEnabled])
+
+  if (remaining < 0) return null
+  if (remaining === 0) {
+    return <Text style={countdownStyles.ready}>再投票できます</Text>
+  }
+
+  const totalMin = Math.ceil(remaining / 60000)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  const text = h > 0 ? `あと${h}時間${m}分` : `あと${m}分`
+
+  return (
+    <View style={countdownStyles.row}>
+      <Text style={countdownStyles.text}>{text}で再投票できます</Text>
+      <TouchableOpacity onPress={toggleNotify} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <FontIcon
+          name={notifyOn ? 'bell' : 'bell-slash-o'}
+          color={notifyOn ? colors.primary : colors.textMuted}
+          size={16}
+        />
+      </TouchableOpacity>
+    </View>
+  )
+}
+
+const countdownStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  text: {
+    color: colors.textSecondary,
+    fontSize: 12,
+  },
+  ready: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+})
 
 const FILTER_TABS = [
   { key: 'all', label: 'すべて' },
@@ -41,7 +131,7 @@ export default function Details() {
   const { name, imageUrl: paramImageUrl } = route.params
 
   const {
-    voted, recordVote, isNgComment,
+    voted, recordVote, getVotedAt, isNgComment,
     cacheResult, getCachedResult,
     recordCommentVote, getCommentVoted,
     recordBrowse,
@@ -307,6 +397,7 @@ export default function Details() {
             </Text>
           </TouchableOpacity>
         </View>
+        {voteStatus && <CountdownText name={name} />}
       </View>
 
       {/* フィルタバー */}

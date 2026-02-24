@@ -16,6 +16,9 @@ import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { colors } from '../../theme'
 import { postComment } from '../../utils/sukikira'
 import { useSettings } from '../../contexts/SettingsContext'
+import * as Linking from 'expo-linking'
+
+const TERMS_URL = 'https://sukikira.pages.dev/terms.html'
 
 const MAX_LENGTH = 200
 
@@ -23,7 +26,7 @@ export default function Post() {
   const navigation = useNavigation()
   const route = useRoute()
   const { name, replyTo } = route.params
-  const { cacheResult, voted, recordComment } = useSettings()
+  const { cacheResult, voted, recordComment, eulaAccepted, acceptEula } = useSettings()
 
   // 投票済みの種別から初期タイプを決定 ('like'→好き派='1', 'dislike'→嫌い派='0')
   const voteStatus = voted[name]
@@ -32,14 +35,12 @@ export default function Post() {
   const [body, setBody] = useState(replyTo ? `>>${replyTo}\n` : '')
   const [loading, setLoading] = useState(false)
 
-  const onSubmit = async () => {
+  const doSubmit = async () => {
     if (!body.trim()) return
     setLoading(true)
     try {
       const result = await postComment(name, body.trim(), defaultType)
-      // 投稿結果をキャッシュに保存してから戻る（新しいDetailsをpushしない）
       cacheResult(name, result.resultInfo, result.comments)
-      // 自分のコメントIDを特定して記録
       const trimmedBody = body.trim()
       const coreBody = trimmedBody.replace(/^>>\d+\n?/, '').slice(0, 30)
       const matched = result.comments.find(c => c.body === trimmedBody || (coreBody && c.body.includes(coreBody)))
@@ -55,6 +56,32 @@ export default function Post() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const onSubmit = () => {
+    if (!body.trim()) return
+    if (eulaAccepted) {
+      doSubmit()
+      return
+    }
+    Alert.alert(
+      '利用規約への同意',
+      'コメントを投稿するには利用規約への同意が必要です。',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '利用規約を確認',
+          onPress: () => Linking.openURL(TERMS_URL),
+        },
+        {
+          text: '同意して投稿',
+          onPress: () => {
+            acceptEula()
+            doSubmit()
+          },
+        },
+      ],
+    )
   }
 
   const remaining = MAX_LENGTH - body.length

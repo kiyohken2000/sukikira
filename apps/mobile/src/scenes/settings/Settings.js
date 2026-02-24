@@ -15,6 +15,7 @@ import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { colors } from '../../theme'
 import { useSettings } from '../../contexts/SettingsContext'
 import { version } from '../../config'
+import * as Linking from 'expo-linking'
 
 export default function Settings() {
   const { ngWords, addNgWord, removeNgWord } = useSettings()
@@ -95,6 +96,17 @@ export default function Settings() {
               <Text style={styles.aboutAppName}>スキキラ</Text>
               <Text style={styles.aboutSubtitle}>for 好き嫌い.com</Text>
               <Text style={styles.aboutVersion}>バージョン {version}</Text>
+              <View style={styles.aboutLinks}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://sukikira.pages.dev/terms.html')}>
+                  <Text style={styles.aboutLink}>利用規約</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => Linking.openURL('https://sukikira.pages.dev/privacy.html')}>
+                  <Text style={styles.aboutLink}>プライバシーポリシー</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => Linking.openURL('https://sukikira.pages.dev/support.html')}>
+                  <Text style={styles.aboutLink}>サポート</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           }
         />
@@ -227,5 +239,15 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 4,
+  },
+  aboutLinks: {
+    marginTop: 20,
+    gap: 12,
+    alignItems: 'center',
+  },
+  aboutLink: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
   },
 })

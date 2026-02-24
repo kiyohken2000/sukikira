@@ -59,7 +59,8 @@
     },
     "plugins": [
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "expo-notifications"
     ],
     "extra": {
       "eas": {
