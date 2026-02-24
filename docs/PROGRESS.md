@@ -103,8 +103,8 @@
 - [x] App Store向けスクリーンショット作成
 - [x] App Store / Google Play 説明文作成（`docs/STORE_METADATA.md`）
 - [x] EAS Buildでビルド
-- [x] App Store申請（審査中）
-- [x] Google Play申請（審査中）
+- [x] App Store申請・公開済み（https://apps.apple.com/jp/app/id6759544300）
+- [x] Google Play申請・公開済み（https://play.google.com/store/apps/details?id=net.votepurchase.sukikira）
 
 ---
 
@@ -227,3 +227,5 @@
 | 2026/02/23 | xdate は1分でも古いと拒否されるが、ウェブ版も同じ設計（レスポンスボディ無視）のため修正不要と判断（analyze_xdate.py） |
 | 2026/02/24 | 再投票カウントダウン + ローカル通知（人物ごとオプトイン）実装完了 |
 | 2026/02/24 | App Store 審査リジェクト: Guideline 1.2（EULA）+ Guideline 1.5（Support URL）の2点指摘 |
+| 2026/02/24 | App Store 公開完了 |
+| 2026/02/24 | Google Play 公開完了 |
