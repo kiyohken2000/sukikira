@@ -156,11 +156,11 @@
 通常は「好き済」バッジのみ。再投票が近づいたときだけ残り時間を表示することで、常時表示による情報過多を避ける。
 
 **実装方針:**
-- [ ] `votedAt + VOTE_EXPIRE_MS - Date.now()` で残り ms を算出するヘルパーを SettingsContext に追加
-- [ ] Details.js: 投票済み表示の横に残り時間を常時表示。0になったら「再投票できます」
-- [ ] PersonCard: `remainingMs` prop を追加。2時間（7,200,000ms）未満のときのみ残り時間テキストを表示
-- [ ] Home.js / Search.js: `votedRaw[name]?.votedAt` を PersonCard に渡す
-- [ ] 時間表示は「あと X時間Y分」形式（1時間未満は「あとY分」）
+- [x] `getVotedAt(name)` を SettingsContext に追加（votedRawRef 経由）
+- [x] Details.js: 投票ボタン下に `CountdownText` コンポーネント。毎分更新、0で「再投票できます」
+- [x] PersonCard: `remainingMs` prop を追加。2時間（7,200,000ms）未満のときのみ残り時間テキストを表示
+- [x] Home.js / Search.js: `getVotedAt` で remainingMs を算出して PersonCard に渡す
+- [x] 時間表示は「あと X時間Y分」形式（1時間未満は「あとY分」）
 - 追加ライブラリ不要・JSのみの変更なら EAS Update で配信可能
 
 ---
@@ -191,10 +191,10 @@
 | 24h経過・通知発火 | 「〇〇への再投票が可能になりました」 |
 
 **実装タスク:**
-- [ ] `expo-notifications` 導入（EAS Build 再ビルド・再申請が必要）
-- [ ] SettingsContext に `notifyVote` / `notifyIds` 追加
-- [ ] Details.js にベルアイコン追加
-- [ ] `recordVote` 拡張（通知オン時に自動再スケジュール）
+- [x] `expo-notifications` 導入済み（package.json + app.json plugins 設定済み）
+- [x] `src/utils/notification.js` 新規作成（`scheduleVoteNotification` / `cancelVoteNotification`）
+- [x] SettingsContext に `notifyVote` / `notifyIds` 追加（`isNotifyEnabled` / `setNotifyEnabled` / `getNotifyId` / `setNotifyId`）
+- [x] Details.js の `CountdownText` 内にベルアイコン追加（トグルでスケジュール/キャンセル）
 
 ---
 
@@ -225,3 +225,5 @@
 | 2026/02/23 | result ページのトークンはコメント投稿フォーム用（再投票不可）と判明（analyze_result_tokens.py） |
 | 2026/02/23 | コメント good/bad：重複投票・good→bad 変更はサーバーがIPで拒否（レスポンス5）と判明（analyze_comment_revote.py） |
 | 2026/02/23 | xdate は1分でも古いと拒否されるが、ウェブ版も同じ設計（レスポンスボディ無視）のため修正不要と判断（analyze_xdate.py） |
+| 2026/02/24 | 再投票カウントダウン + ローカル通知（人物ごとオプトイン）実装完了 |
+| 2026/02/24 | App Store 審査リジェクト: Guideline 1.2（EULA）+ Guideline 1.5（Support URL）の2点指摘 |

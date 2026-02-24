@@ -233,6 +233,36 @@
       line-height: 1.6;
     }
 
+    /* ─── ギャラリー ─── */
+    .gallery {
+      max-width: 1200px;
+      margin: 0 auto 80px;
+      padding: 0 24px;
+    }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .gallery-item {
+      text-align: center;
+    }
+    .gallery-item img {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      transition: transform 0.2s;
+    }
+    .gallery-item:hover img {
+      transform: scale(1.03);
+    }
+    .gallery-caption {
+      color: var(--text-secondary);
+      font-size: 11px;
+      margin-top: 8px;
+    }
+
     /* ─── 区切り ─── */
     .divider {
       width: 1px;
@@ -369,6 +399,29 @@
         </div>
       </div>
 
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ギャラリー -->
+  <section class="gallery">
+    <p class="section-label">Gallery</p>
+    <h2 class="section-title">スクリーンショット</h2>
+    <div class="gallery-grid">
+      <div class="gallery-item"><img src="images/ss_home_1.jpg" alt="ランキング" /><div class="gallery-caption">ランキング</div></div>
+      <div class="gallery-item"><img src="images/ss_detail_1.jpg" alt="詳細画面" /><div class="gallery-caption">人物詳細・投票</div></div>
+      <div class="gallery-item"><img src="images/ss_detail_2.jpg" alt="コメント一覧" /><div class="gallery-caption">コメント一覧</div></div>
+      <div class="gallery-item"><img src="images/ss_detail_search_1.jpg" alt="スレ内検索" /><div class="gallery-caption">スレ内検索</div></div>
+      <div class="gallery-item"><img src="images/ss_detail_bookmark_1.jpg" alt="ブックマーク追加" /><div class="gallery-caption">ブックマーク追加</div></div>
+      <div class="gallery-item"><img src="images/ss_swipe_mode_1.jpg" alt="スワイプ投票" /><div class="gallery-caption">スワイプ投票</div></div>
+      <div class="gallery-item"><img src="images/ss_search_mode_1.jpg" alt="検索" /><div class="gallery-caption">人物検索</div></div>
+      <div class="gallery-item"><img src="images/ss_history_1.jpg" alt="投票履歴" /><div class="gallery-caption">投票履歴</div></div>
+      <div class="gallery-item"><img src="images/ss_history_2.jpg" alt="閲覧履歴" /><div class="gallery-caption">閲覧履歴</div></div>
+      <div class="gallery-item"><img src="images/ss_history_3.jpg" alt="コメント履歴" /><div class="gallery-caption">コメント履歴</div></div>
+      <div class="gallery-item"><img src="images/ss_bookmark_1.jpg" alt="ブックマーク一覧" /><div class="gallery-caption">ブックマーク一覧</div></div>
+      <div class="gallery-item"><img src="images/ss_bookmark_2.jpg" alt="ブックマークフォルダ" /><div class="gallery-caption">フォルダ内容</div></div>
+      <div class="gallery-item"><img src="images/ss_settings_1.jpg" alt="設定画面" /><div class="gallery-caption">設定</div></div>
     </div>
   </section>
 
