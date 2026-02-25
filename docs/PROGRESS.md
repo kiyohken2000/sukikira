@@ -79,6 +79,8 @@
 - [x] 閲覧・投票・コメント履歴タブ追加
 - [x] ブックマーク機能（フォルダ形式カテゴリ管理）
 - [x] 投票済みバッジ（ランキング・検索画面）
+- [x] 再投票可バッジ（ランキング・検索・ブックマーク・履歴画面）
+- [x] 履歴画面に「履歴 / 再投票」サブタブ（通知予定・再投票待ち一覧）
 - [x] スレ内検索機能（コメント一覧内キーワード検索）
 - [x] 自分のコメント追跡（レス確認・good/bad 反応確認）
 - [x] スワイプ投票モード
@@ -158,8 +160,9 @@
 **実装方針:**
 - [x] `getVotedAt(name)` を SettingsContext に追加（votedRawRef 経由）
 - [x] Details.js: 投票ボタン下に `CountdownText` コンポーネント。毎分更新、0で「再投票できます」
-- [x] PersonCard: `remainingMs` prop を追加。2時間（7,200,000ms）未満のときのみ残り時間テキストを表示
-- [x] Home.js / Search.js: `getVotedAt` で remainingMs を算出して PersonCard に渡す
+- [x] PersonCard: `remainingMs` prop を追加。2時間未満で残り時間テキスト、0で「再投票可」バッジ（紫）を表示
+- [x] Home.js / Search.js / BookmarkFolder.js: `getVotedAt` で remainingMs を算出して渡す（24h経過時は0）
+- [x] History.js VoteRow / BookmarkFolder.js: 24h経過で「再投票可」バッジ表示
 - [x] 時間表示は「あと X時間Y分」形式（1時間未満は「あとY分」）
 - 追加ライブラリ不要・JSのみの変更なら EAS Update で配信可能
 

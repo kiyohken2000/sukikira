@@ -47,7 +47,8 @@ NavigationContainer
 | `apps/mobile/src/scenes/details/Details.js` | 人物詳細画面（スレ内検索・自コメバッジ・ブックマーク★ボタン等） |
 | `apps/mobile/src/scenes/post/Post.js` | コメント投稿画面 |
 | `apps/mobile/src/scenes/settings/Settings.js` | 設定画面（NGワード管理） |
-| `apps/mobile/src/scenes/history/History.js` | 履歴画面（投票・閲覧・コメント3セクション） |
+| `apps/mobile/src/scenes/history/History.js` | 履歴画面（「履歴 / 再投票」サブタブ。履歴=投票・閲覧・コメント3セクション） |
+| `apps/mobile/src/scenes/history/RevoteTab.js` | 再投票タブ（通知予定・再投票待ちの2セクション） |
 | `apps/mobile/src/scenes/bookmark/Bookmark.js` | ブックマーク画面（フォルダ一覧・作成・削除） |
 | `apps/mobile/src/scenes/bookmark/BookmarkFolder.js` | フォルダ内人物一覧（タップでDetails・個別削除） |
 | `apps/mobile/src/scenes/swipe/SwipeVote.js` | スワイプ投票画面（PanResponder + Animated） |
@@ -187,6 +188,9 @@ NavigationContainer
 | `@sukikira:ngWords` | NGワード配列 `string[]` |
 | `@sukikira:voted` | 投票済みマップ `{ [name]: { type: 'like'\|'dislike', votedAt: number } }` （人物ごと24h でリセット） |
 | `@sukikira:voteHistory` | 投票履歴 `Array<{ name, imageUrl, voteType, time }>` |
+| `@sukikira:notifyVote` | 通知オンの人物マップ `{ [name]: true }` |
+| `@sukikira:notifyIds` | スケジュール済み通知ID `{ [name]: string }` |
+| `@sukikira:lastViewed` | 最終閲覧記録 `{ [name]: { maxCommentId, viewedAt } }` |
 | `@sukikira:browseHistory` | 閲覧履歴 `Array<{ name, imageUrl, time }>` |
 | `@sukikira:commentHistory` | コメント履歴 `Array<{ name, body, time }>` |
 | `@sukikira:resultCache` | 結果キャッシュ `{ [name]: { resultInfo, comments } }` |
@@ -302,8 +306,8 @@ const getCommentVoted = useCallback((commentId) => commentVotedRef.current[comme
 - コメント投稿（投稿後に既存Details画面へ戻る・キャッシュ反映）
 - 設定画面（NGワード追加・削除UI）
 - ハプティクス（投票・コメント good/bad）
-- 履歴タブ（投票・閲覧・コメント履歴、タップで Details へ）
-- 投票済みバッジ / コメント済みバッジ（ランキング・検索の人物カード）
+- 履歴タブ（「履歴 / 再投票」サブタブ。履歴=投票・閲覧・コメント履歴、再投票=通知予定+再投票待ち一覧）
+- 投票済みバッジ / コメント済みバッジ / 再投票可バッジ（ランキング・検索・ブックマーク・履歴の人物カード）
 - ⋮メニュー「NGワード追加」（Modal+TextInput でキーワード登録）
 - スレ内検索（フィルタバー横🔍→検索バー展開、ヒット件数表示）
 - 自分のコメント追跡（「自分」バッジ・「返信」バッジ・いいね増加数）
