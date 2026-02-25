@@ -5,6 +5,7 @@ import TabNavigator from '../tabs/Tabs'
 import Details from '../../../scenes/details/Details'
 import Post from '../../../scenes/post/Post'
 import SwipeVote from '../../../scenes/swipe/SwipeVote'
+import WebViewTest from '../../../scenes/debug/WebViewTest'
 
 const Stack = createStackNavigator()
 
@@ -32,6 +33,13 @@ export default function RootStack() {
       <Stack.Screen
         name="SwipeVote"
         component={SwipeVote}
+        options={{
+          ...TransitionPresets.SlideFromRightIOS,
+        }}
+      />
+      <Stack.Screen
+        name="WebViewTest"
+        component={WebViewTest}
         options={{
           ...TransitionPresets.SlideFromRightIOS,
         }}

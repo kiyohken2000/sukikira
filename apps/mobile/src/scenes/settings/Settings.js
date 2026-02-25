@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import {
   View,
   Text,
@@ -16,10 +16,14 @@ import { colors } from '../../theme'
 import { useSettings } from '../../contexts/SettingsContext'
 import { version } from '../../config'
 import * as Linking from 'expo-linking'
+import { useNavigation } from '@react-navigation/native'
 
 export default function Settings() {
+  const navigation = useNavigation()
   const { ngWords, addNgWord, removeNgWord } = useSettings()
   const [input, setInput] = useState('')
+  const tapCountRef = useRef(0)
+  const tapTimerRef = useRef(null)
 
   const handleAdd = () => {
     const word = input.trim()
@@ -95,7 +99,19 @@ export default function Settings() {
               />
               <Text style={styles.aboutAppName}>スキキラ</Text>
               <Text style={styles.aboutSubtitle}>for 好き嫌い.com</Text>
-              <Text style={styles.aboutVersion}>バージョン {version}</Text>
+              <Text
+                style={styles.aboutVersion}
+                onPress={() => {
+                  tapCountRef.current++
+                  clearTimeout(tapTimerRef.current)
+                  if (tapCountRef.current >= 5) {
+                    tapCountRef.current = 0
+                    navigation.navigate('WebViewTest')
+                  } else {
+                    tapTimerRef.current = setTimeout(() => { tapCountRef.current = 0 }, 2000)
+                  }
+                }}
+              >バージョン {version}</Text>
               <View style={styles.aboutLinks}>
                 <TouchableOpacity onPress={() => Linking.openURL('https://sukikira.pages.dev/terms.html')}>
                   <Text style={styles.aboutLink}>利用規約</Text>
