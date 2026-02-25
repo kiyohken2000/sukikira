@@ -233,3 +233,4 @@
 | 2026/02/24 | App Store 公開完了 |
 | 2026/02/24 | Google Play 公開完了 |
 | 2026/02/24 | 括弧付き人物名バグ修正: getRanking の name 取得元を h2 テキスト→href デコードに変更（analyze_parentheses*.py で調査） |
+| 2026/02/25 | コメントページネーション修正: Cloudflare が `?nxc=` をブロック → 個別コメントAPI (`/p/{pid}/c/{cid}/t/{sk_token}`) 方式に変更。追加コメントは good/bad グレーアウト |

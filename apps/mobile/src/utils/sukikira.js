@@ -173,7 +173,10 @@ const parseResult = (html) => {
   const name = h1.replace(/&nbsp;/g, ' ').replace(/<[^>]+>/g, '').replace(/のこと.*/, '').trim()
   const xdate   = html.match(/var xdate\s*=\s*"([^"]+)"/)?.[1] ?? ''
   const pidHash = html.match(/var pid_hash\s*=\s*"([^"]+)"/)?.[1] ?? ''
-  return { name, imageUrl, images, tags, likePercent, dislikePercent, likeVotes, dislikeVotes, xdate, pidHash }
+  const pid     = html.match(/var pid\s*=\s*['"]([^'"]+)['"]/)?.[1]
+                ?? html.match(/\/p\/([^/]+)\/c\//)?.[1] ?? ''
+  const skToken = html.match(/var sk_token\s*=\s*['"]([^'"]+)['"]/)?.[1] ?? ''
+  return { name, imageUrl, images, tags, likePercent, dislikePercent, likeVotes, dislikeVotes, xdate, pidHash, pid, skToken }
 }
 
 // -----------------------------------------------------------------------
@@ -205,23 +208,71 @@ export const getComments = async (name) => {
 
   const resultInfo = parseResult(html)
   const comments = parseComments(html)
-  const nextCursor = parseNextCursor(html)
+  const nextCursor = comments.length >= 20 ? parseNextCursor(html) : null
   return { resultInfo, comments, nextCursor }
 }
 
-/** ページネーションカーソル */
-const parseNextCursor = (html) =>
-  html.match(/\?nxc=(\d+)/)?.[1] ?? null
+/** コメントの最小IDからページネーションカーソルを算出 */
+const parseNextCursor = (html) => {
+  const ids = []
+  const re = /<div class="comment-container c(\d+)"/g
+  let m
+  while ((m = re.exec(html)) !== null) ids.push(Number(m[1]))
+  if (ids.length === 0) return null
+  const minId = Math.min(...ids)
+  return minId > 1 ? String(minId) : null
+}
 
 /**
- * 追加コメントを取得（?nxc={cursor} ページネーション）
+ * 追加コメントを個別取得（/p/{pid}/c/{cid}/t/{token} API）
+ * Cloudflare が ?nxc= ページネーションをリダイレクトするため、
+ * 個別コメントAPIで取得する。
+ * 注意: APIは upvote/downvote 数と token を返さない。
+ * @param {string} name - 人物名
+ * @param {string} cursor - 現在の最小コメントID
+ * @param {string} pid - 人物ID（resultInfo.pid）
+ * @param {string} skToken - セキュリティトークン（resultInfo.skToken）
  */
-export const getMoreComments = async (name, cursor) => {
-  const encodedName = encodeName(name)
-  const html = await get(`/people/result/${encodedName}/?nxc=${cursor}`)
-  if (!/好き派:/.test(html)) return { comments: [], nextCursor: null }
-  const comments = parseComments(html)
-  const nextCursor = parseNextCursor(html)
+export const getMoreComments = async (name, cursor, pid, skToken) => {
+  const startId = Number(cursor) - 1
+  if (startId < 1 || !pid || !skToken) return { comments: [], nextCursor: null }
+
+  const comments = []
+  let lowestId = startId
+  let misses = 0
+  for (let id = startId; id > 0 && comments.length < 20 && misses < 10; id--) {
+    try {
+      const res = await fetch(`${BASE_URL}/p/${pid}/c/${id}/t/${skToken}`, { credentials: 'include' })
+      const text = await res.text()
+      if (!text || text.length < 10) { misses++; continue }
+      const data = JSON.parse(text)
+      if (data && data.body) {
+        comments.push({
+          id: data.index ?? String(id),
+          body: data.body
+            .replace(/<span[^>]*class=['"]anchor['"][^>]*data=['"](\d+)['"][^>]*>([^<]+)<\/span>/g, '$2')
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&[^;]+;/g, ' ')
+            .trim(),
+          type: data.type === '1' ? 'like' : data.type === '0' ? 'dislike' : 'unknown',
+          upvoteCount: 0,
+          downvoteCount: 0,
+          token: '',
+          author: data.name_hash ?? '匿名',
+          dateText: data.created_at ?? '',
+        })
+        lowestId = id
+        misses = 0
+      } else {
+        misses++
+      }
+    } catch (e) {
+      misses++
+    }
+  }
+
+  const nextCursor = comments.length > 0 ? String(lowestId) : null
   return { comments, nextCursor }
 }
 
@@ -284,7 +335,7 @@ const parseComments = (html) => {
 /**
  * @param {string} name
  * @param {'like' | 'dislike'} voteType
- * @returns {Promise<{resultInfo: object, comments: Array, nextCursor: string|null}>}
+ * @returns {Promise<{resultInfo: object, comments: Array}>}
  */
 export const vote = async (name, voteType) => {
   const encodedName = encodeName(name)
@@ -334,16 +385,16 @@ export const vote = async (name, voteType) => {
 
   // POSTレスポンスに結果が含まれていればそのまま返す
   if (html && /好き派:/.test(html)) {
-    return { resultInfo: parseResult(html), comments: parseComments(html), nextCursor: parseNextCursor(html) }
+    return { resultInfo: parseResult(html), comments: parseComments(html) }
   }
 
   // POSTレスポンスが空の場合、結果ページを再取得（投票済みなので result ページが返る）
   const fallbackHtml = await get(`/people/result/${encodedName}`)
   if (/好き派:/.test(fallbackHtml)) {
-    return { resultInfo: parseResult(fallbackHtml), comments: parseComments(fallbackHtml), nextCursor: parseNextCursor(fallbackHtml) }
+    return { resultInfo: parseResult(fallbackHtml), comments: parseComments(fallbackHtml) }
   }
 
-  return { resultInfo: null, comments: [], nextCursor: null }
+  return { resultInfo: null, comments: [] }
 }
 
 // -----------------------------------------------------------------------

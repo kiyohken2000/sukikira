@@ -266,7 +266,7 @@ export default function Details() {
       setResultInfo(info)
       setComments(cmts)
       allCommentsRef.current = cmts
-      setNextCursor(cursor)
+      setNextCursor(cursor ?? null)
       recordVote(name, type, info.imageUrl || paramImageUrl)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       cacheResult(name, info, cmts)
@@ -285,7 +285,7 @@ export default function Details() {
     if (!nextCursor || loadingMore) return
     setLoadingMore(true)
     try {
-      const { comments: more, nextCursor: next } = await getMoreComments(name, nextCursor)
+      const { comments: more, nextCursor: next } = await getMoreComments(name, nextCursor, resultInfo?.pid, resultInfo?.skToken)
       setComments(prev => {
         const ids = new Set(prev.map(c => c.id))
         const merged = [...prev, ...more.filter(c => !ids.has(c.id))]

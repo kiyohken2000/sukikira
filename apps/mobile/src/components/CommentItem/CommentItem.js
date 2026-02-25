@@ -152,7 +152,7 @@ export default function CommentItem({
   }, [comment.id, onReply, onHide, openNgModal])
 
   const segments = parseBodySegments(comment.body)
-  const hasVoteData = !!comment.token
+  const hasVoteData = !!(comment.token || comment.type)
   const total = likes + dislikes
   const likePct = total > 0 ? (likes / total) * 100 : 50
 
@@ -225,11 +225,11 @@ export default function CommentItem({
 
       {/* upvote/downvote バー */}
       {hasVoteData && (
-        <View style={styles.voteArea}>
+        <View style={[styles.voteArea, !comment.token && { opacity: 0.35 }]}>
           <TouchableOpacity
             style={[styles.voteSide, styles.voteLike, voted === 'like' && styles.votedLike]}
             onPress={() => handleVote('like')}
-            disabled={!!voted}
+            disabled={!!voted || !comment.token}
           >
             <Text style={[styles.voteCount, { color: voted === 'like' ? '#fff' : colors.like }]}>
               ▲ {likes}{upvoteChange > 0 && isMine ? ` (+${upvoteChange})` : ''}
@@ -242,7 +242,7 @@ export default function CommentItem({
           <TouchableOpacity
             style={[styles.voteSide, styles.voteDislike, voted === 'dislike' && styles.votedDislike]}
             onPress={() => handleVote('dislike')}
-            disabled={!!voted}
+            disabled={!!voted || !comment.token}
           >
             <Text style={[styles.voteCount, { color: voted === 'dislike' ? '#fff' : colors.dislike }]}>
               ▼ {dislikes}
