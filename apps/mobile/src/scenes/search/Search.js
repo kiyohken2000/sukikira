@@ -23,12 +23,29 @@ function getRemainingMs(getVotedAt, name) {
   const votedAt = getVotedAt(name)
   if (!votedAt) return undefined
   const remaining = votedAt + VOTE_EXPIRE_MS - Date.now()
-  return remaining > 0 ? remaining : undefined
+  return remaining > 0 ? remaining : 0
+}
+
+function formatTimeAgo(ms) {
+  const sec = Math.floor(ms / 1000)
+  if (sec < 60) return `${sec}秒前`
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}分前`
+  const hours = Math.floor(min / 60)
+  if (hours < 24) return `${hours}時間前`
+  const days = Math.floor(hours / 24)
+  return `${days}日前`
+}
+
+function getLastViewedText(getLastViewed, name) {
+  const lv = getLastViewed(name)
+  if (!lv) return undefined
+  return `最終閲覧: ${formatTimeAgo(Date.now() - lv.viewedAt)}`
 }
 
 export default function Search() {
   const navigation = useNavigation()
-  const { voted, commentHistory, getVotedAt } = useSettings()
+  const { voted, commentHistory, getVotedAt, getLastViewed } = useSettings()
   const commentedNames = useMemo(
     () => new Set(commentHistory.map(h => h.name)),
     [commentHistory],
@@ -111,6 +128,7 @@ export default function Search() {
               votedType={voted[item.name]}
               commented={commentedNames.has(item.name)}
               remainingMs={getRemainingMs(getVotedAt, item.name)}
+              lastViewedText={getLastViewedText(getLastViewed, item.name)}
               onPress={() => navigation.navigate('Details', { name: item.name, imageUrl: item.imageUrl })}
             />
           )}

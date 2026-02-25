@@ -12,6 +12,7 @@ const STORAGE_KEY_COMMENT_VOTED = '@sukikira:commentVoted'
 const STORAGE_KEY_EULA_ACCEPTED = '@sukikira:eulaAccepted'
 const STORAGE_KEY_NOTIFY_VOTE = '@sukikira:notifyVote'
 const STORAGE_KEY_NOTIFY_IDS = '@sukikira:notifyIds'
+const STORAGE_KEY_LAST_VIEWED = '@sukikira:lastViewed'
 
 const VOTE_EXPIRE_MS = 24 * 60 * 60 * 1000 // 24時間
 
@@ -46,6 +47,8 @@ export const SettingsProvider = ({ children }) => {
   const notifyVoteRef = useRef({})
   // 通知: スケジュール済み通知ID { [name]: string }
   const notifyIdsRef = useRef({})
+  // 最終閲覧記録: { [name]: { maxCommentId: string, viewedAt: number } }
+  const lastViewedRef = useRef({})
   // EULA同意状態
   const [eulaAccepted, setEulaAccepted] = useState(false)
 
@@ -53,7 +56,7 @@ export const SettingsProvider = ({ children }) => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [ngRaw, votedRaw, cacheRaw, voteHRaw, browseHRaw, commentHRaw, bmRaw, cvRaw, eulaRaw, nvRaw, niRaw] = await Promise.all([
+        const [ngRaw, votedRaw, cacheRaw, voteHRaw, browseHRaw, commentHRaw, bmRaw, cvRaw, eulaRaw, nvRaw, niRaw, lvRaw] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEY_NG_WORDS),
           AsyncStorage.getItem(STORAGE_KEY_VOTED),
           AsyncStorage.getItem(STORAGE_KEY_RESULT_CACHE),
@@ -65,6 +68,7 @@ export const SettingsProvider = ({ children }) => {
           AsyncStorage.getItem(STORAGE_KEY_EULA_ACCEPTED),
           AsyncStorage.getItem(STORAGE_KEY_NOTIFY_VOTE),
           AsyncStorage.getItem(STORAGE_KEY_NOTIFY_IDS),
+          AsyncStorage.getItem(STORAGE_KEY_LAST_VIEWED),
         ])
         if (ngRaw) setNgWords(JSON.parse(ngRaw))
         if (votedRaw) {
@@ -92,6 +96,7 @@ export const SettingsProvider = ({ children }) => {
         if (eulaRaw === 'true') setEulaAccepted(true)
         if (nvRaw) notifyVoteRef.current = JSON.parse(nvRaw)
         if (niRaw) notifyIdsRef.current = JSON.parse(niRaw)
+        if (lvRaw) lastViewedRef.current = JSON.parse(lvRaw)
       } catch (e) {
         console.warn('SettingsContext load error', e)
       }
@@ -266,6 +271,25 @@ export const SettingsProvider = ({ children }) => {
     AsyncStorage.setItem(STORAGE_KEY_NOTIFY_IDS, JSON.stringify(next)).catch(() => {})
   }, [])
 
+  // 全投票データ取得（ref 経由で安定した参照）
+  const getAllVotedRaw = useCallback(() => votedRawRef.current, [])
+
+  // 全通知設定取得（ref 経由で安定した参照）
+  const getAllNotifyVote = useCallback(() => notifyVoteRef.current, [])
+
+  // 最終閲覧記録: 取得（ref 経由で安定した参照）
+  const getLastViewed = useCallback(
+    (name) => lastViewedRef.current[name] ?? null,
+    [],
+  )
+
+  // 最終閲覧記録: 更新
+  const recordLastViewed = useCallback((name, maxCommentId) => {
+    const next = { ...lastViewedRef.current, [name]: { maxCommentId, viewedAt: Date.now() } }
+    lastViewedRef.current = next
+    AsyncStorage.setItem(STORAGE_KEY_LAST_VIEWED, JSON.stringify(next)).catch(() => {})
+  }, [])
+
   // EULA同意
   const acceptEula = useCallback(() => {
     setEulaAccepted(true)
@@ -280,7 +304,7 @@ export const SettingsProvider = ({ children }) => {
 
   return (
     <SettingsContext.Provider
-      value={{ ngWords, addNgWord, removeNgWord, voted, recordVote, getVotedAt, isNgComment, cacheResult, getCachedResult, recordCommentVote, getCommentVoted, voteHistory, browseHistory, commentHistory, recordBrowse, recordComment, bookmarkFolders, addBookmarkFolder, removeBookmarkFolder, addToFolder, removeFromFolder, eulaAccepted, acceptEula, isNotifyEnabled, setNotifyEnabled, getNotifyId, setNotifyId }}
+      value={{ ngWords, addNgWord, removeNgWord, voted, recordVote, getVotedAt, isNgComment, cacheResult, getCachedResult, recordCommentVote, getCommentVoted, voteHistory, browseHistory, commentHistory, recordBrowse, recordComment, bookmarkFolders, addBookmarkFolder, removeBookmarkFolder, addToFolder, removeFromFolder, eulaAccepted, acceptEula, isNotifyEnabled, setNotifyEnabled, getNotifyId, setNotifyId, getLastViewed, recordLastViewed, getAllVotedRaw, getAllNotifyVote }}
     >
       {children}
     </SettingsContext.Provider>

@@ -22,6 +22,14 @@ export default function Bookmark() {
   const flatListRef = useRef(null)
   useScrollToTop(flatListRef)
 
+  const totalCount = React.useMemo(() => {
+    const seen = new Set()
+    for (const f of bookmarkFolders) {
+      for (const item of f.items) seen.add(item.name)
+    }
+    return seen.size
+  }, [bookmarkFolders])
+
   const [modalVisible, setModalVisible] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
 
@@ -59,6 +67,22 @@ export default function Bookmark() {
         ref={flatListRef}
         data={bookmarkFolders}
         keyExtractor={(f) => f.id}
+        ListHeaderComponent={totalCount > 0 ? (
+          <TouchableOpacity
+            style={styles.folderRow}
+            onPress={() =>
+              navigation.navigate('BookmarkFolder', { folderId: '__all__', folderName: 'すべてのブックマーク' })
+            }
+            activeOpacity={0.7}
+          >
+            <FontIcon name="bookmark" color={colors.primary} size={22} />
+            <View style={styles.folderBody}>
+              <Text style={styles.folderName}>すべて</Text>
+              <Text style={styles.folderCount}>{totalCount}件</Text>
+            </View>
+            <FontIcon name="chevron-right" color={colors.textMuted} size={16} />
+          </TouchableOpacity>
+        ) : null}
         renderItem={({ item: folder }) => (
           <TouchableOpacity
             style={styles.folderRow}

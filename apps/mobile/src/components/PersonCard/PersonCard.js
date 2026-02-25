@@ -20,7 +20,7 @@ function formatRemaining(ms) {
  * @param {boolean} commented — コメント投稿済み
  * @param {number|undefined} remainingMs — 再投票までの残りms
  */
-export default function PersonCard({ item, onPress, rank, votedType, commented, remainingMs }) {
+export default function PersonCard({ item, onPress, rank, votedType, commented, remainingMs, lastViewedText }) {
   const remainingText = remainingMs != null ? formatRemaining(remainingMs) : null
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
@@ -53,8 +53,16 @@ export default function PersonCard({ item, onPress, rank, votedType, commented, 
             <Text style={styles.badgeText}>コメ済</Text>
           </View>
         )}
+        {remainingMs === 0 && (
+          <View style={[styles.badge, styles.revoteBadge]}>
+            <Text style={styles.badgeText}>再投票可</Text>
+          </View>
+        )}
         {remainingText && (
           <Text style={styles.remainingText}>{remainingText}</Text>
+        )}
+        {lastViewedText && (
+          <Text style={styles.lastViewedText}>{lastViewedText}</Text>
         )}
       </View>
     </TouchableOpacity>
@@ -124,12 +132,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#22c55e66',
   },
+  revoteBadge: {
+    backgroundColor: '#a855f733',
+    borderWidth: 1,
+    borderColor: '#a855f766',
+  },
   badgeText: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.text,
   },
   remainingText: {
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
+  lastViewedText: {
     fontSize: 10,
     color: colors.textSecondary,
   },

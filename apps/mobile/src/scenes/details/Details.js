@@ -137,6 +137,7 @@ export default function Details() {
     recordBrowse,
     commentHistory,
     bookmarkFolders, addBookmarkFolder, addToFolder, removeFromFolder,
+    getLastViewed, recordLastViewed,
   } = useSettings()
   const voteStatus = voted[name]
 
@@ -160,6 +161,9 @@ export default function Details() {
 
   // 全コメント（フィルタ前）への参照（アンカー解決用）
   const allCommentsRef = useRef([])
+
+  // 前回閲覧時の最大コメントID（NEW バッジ判定用）
+  const prevMaxCommentIdRef = useRef(undefined) // undefined=未初期化, null=初回閲覧
 
   // スレ内検索
   const [searchOpen, setSearchOpen] = useState(false)
@@ -209,15 +213,29 @@ export default function Details() {
       if (notFound) {
         setError('この人物のページはsuki-kira.comに存在しません')
       } else if (info !== null) {
+        // 前回の maxCommentId を保存（初回のみ）
+        if (prevMaxCommentIdRef.current === undefined) {
+          const last = getLastViewed(name)
+          prevMaxCommentIdRef.current = last?.maxCommentId ?? null
+        }
         setResultInfo(info)
         setComments(cmts)
         allCommentsRef.current = cmts
         setNextCursor(cursor)
         cacheResult(name, info, cmts)
         recordBrowse(name, info.imageUrl || paramImageUrl)
+        // 最大コメントIDを記録
+        if (cmts.length > 0) {
+          const maxId = cmts.reduce((max, c) => (Number(c.id) > Number(max) ? c.id : max), cmts[0].id)
+          recordLastViewed(name, maxId)
+        }
       } else {
         const cached = getCachedResult(name)
         if (cached) {
+          if (prevMaxCommentIdRef.current === undefined) {
+            const last = getLastViewed(name)
+            prevMaxCommentIdRef.current = last?.maxCommentId ?? null
+          }
           setResultInfo(cached.resultInfo)
           setComments(cached.comments)
           allCommentsRef.current = cached.comments
@@ -515,6 +533,8 @@ export default function Details() {
             const upvoteChange = histEntry
               ? Math.max(0, (item.upvoteCount ?? 0) - (histEntry.initialUpvotes ?? 0))
               : 0
+            const isNew = prevMaxCommentIdRef.current != null &&
+              Number(item.id) > Number(prevMaxCommentIdRef.current)
             return (
               <CommentItem
                 comment={item}
@@ -526,6 +546,7 @@ export default function Details() {
                 isMine={isMine}
                 isReplyToMe={isReplyToMe}
                 upvoteChange={upvoteChange}
+                isNew={isNew}
               />
             )
           }}

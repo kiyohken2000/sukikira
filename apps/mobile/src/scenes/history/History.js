@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -12,6 +12,9 @@ import { useNavigation, useScrollToTop } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { colors } from '../../theme'
 import { useSettings } from '../../contexts/SettingsContext'
+import RevoteTab from './RevoteTab'
+
+const VOTE_EXPIRE_MS = 24 * 60 * 60 * 1000
 
 const THUMB_SIZE = 48
 
@@ -37,15 +40,25 @@ function Thumb({ uri }) {
   return <Image source={{ uri }} style={styles.thumb} />
 }
 
-function VoteRow({ item, onPress }) {
+function VoteRow({ item, onPress, lastViewedText, revoteReady }) {
   const isLike = item.voteType === 'like'
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
       <Thumb uri={item.imageUrl} />
       <View style={styles.rowBody}>
         <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
-        <View style={[styles.badge, isLike ? styles.badgeLike : styles.badgeDislike]}>
-          <Text style={styles.badgeText}>{isLike ? '好き' : '嫌い'}</Text>
+        <View style={styles.rowMeta}>
+          <View style={[styles.badge, isLike ? styles.badgeLike : styles.badgeDislike]}>
+            <Text style={styles.badgeText}>{isLike ? '好き' : '嫌い'}</Text>
+          </View>
+          {revoteReady && (
+            <View style={[styles.badge, styles.revoteBadge]}>
+              <Text style={styles.badgeText}>再投票可</Text>
+            </View>
+          )}
+          {lastViewedText && (
+            <Text style={styles.lastViewedText}>{lastViewedText}</Text>
+          )}
         </View>
       </View>
       <Text style={styles.timeText}>{formatTime(item.time)}</Text>
@@ -53,19 +66,22 @@ function VoteRow({ item, onPress }) {
   )
 }
 
-function BrowseRow({ item, onPress }) {
+function BrowseRow({ item, onPress, lastViewedText }) {
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
       <Thumb uri={item.imageUrl} />
       <View style={styles.rowBody}>
         <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
+        {lastViewedText && (
+          <Text style={styles.lastViewedText}>{lastViewedText}</Text>
+        )}
       </View>
       <Text style={styles.timeText}>{formatTime(item.time)}</Text>
     </TouchableOpacity>
   )
 }
 
-function CommentRow({ item, onPress }) {
+function CommentRow({ item, onPress, lastViewedText }) {
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
       <View style={[styles.thumb, styles.thumbComment]}>
@@ -74,17 +90,26 @@ function CommentRow({ item, onPress }) {
       <View style={styles.rowBody}>
         <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.rowPreview} numberOfLines={2}>{item.body}</Text>
+        {lastViewedText && (
+          <Text style={styles.lastViewedText}>{lastViewedText}</Text>
+        )}
       </View>
       <Text style={styles.timeText}>{formatTime(item.time)}</Text>
     </TouchableOpacity>
   )
 }
 
+const SUB_TABS = [
+  { key: 'history', label: '履歴' },
+  { key: 'revote', label: '再投票' },
+]
+
 export default function History() {
   const navigation = useNavigation()
-  const { voteHistory, browseHistory, commentHistory } = useSettings()
+  const { voteHistory, browseHistory, commentHistory, getLastViewed, getVotedAt } = useSettings()
   const sectionListRef = useRef(null)
   useScrollToTop(sectionListRef)
+  const [activeTab, setActiveTab] = useState('history')
 
   const goToDetails = (name, imageUrl) => {
     navigation.navigate('Details', { name, imageUrl: imageUrl || undefined })
@@ -119,10 +144,16 @@ export default function History() {
   )
 
   const renderItem = ({ item, section }) => {
+    const lv = getLastViewed(item.name)
+    const lvText = lv ? `最終閲覧: ${formatTime(new Date(lv.viewedAt).toISOString())}` : null
     if (section.key === 'vote') {
+      const votedAt = getVotedAt(item.name)
+      const revoteReady = votedAt != null && (Date.now() - votedAt) >= VOTE_EXPIRE_MS
       return (
         <VoteRow
           item={item}
+          lastViewedText={lvText}
+          revoteReady={revoteReady}
           onPress={() => goToDetails(item.name, item.imageUrl)}
         />
       )
@@ -131,6 +162,7 @@ export default function History() {
       return (
         <BrowseRow
           item={item}
+          lastViewedText={lvText}
           onPress={() => goToDetails(item.name, item.imageUrl)}
         />
       )
@@ -138,6 +170,7 @@ export default function History() {
     return (
       <CommentRow
         item={item}
+        lastViewedText={lvText}
         onPress={() => goToDetails(item.name, item.imageUrl)}
       />
     )
@@ -157,16 +190,33 @@ export default function History() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>履歴</Text>
       </View>
-      <SectionList
-        ref={sectionListRef}
-        sections={sections}
-        keyExtractor={(item, index) => `${item.name}-${item.time}-${index}`}
-        renderSectionHeader={renderSectionHeader}
-        renderItem={renderItem}
-        renderSectionFooter={renderEmpty}
-        stickySectionHeadersEnabled={false}
-        contentContainerStyle={styles.listContent}
-      />
+      <View style={styles.tabBar}>
+        {SUB_TABS.map((tab) => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+            onPress={() => setActiveTab(tab.key)}
+          >
+            <Text style={[styles.tabLabel, activeTab === tab.key && styles.tabLabelActive]}>
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {activeTab === 'history' ? (
+        <SectionList
+          ref={sectionListRef}
+          sections={sections}
+          keyExtractor={(item, index) => `${item.name}-${item.time}-${index}`}
+          renderSectionHeader={renderSectionHeader}
+          renderItem={renderItem}
+          renderSectionFooter={renderEmpty}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={styles.listContent}
+        />
+      ) : (
+        <RevoteTab />
+      )}
     </SafeAreaView>
   )
 }
@@ -179,12 +229,33 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   headerTitle: {
     color: colors.text,
     fontSize: 20,
+    fontWeight: '700',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  tabActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: colors.primary,
+  },
+  tabLabel: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  tabLabelActive: {
+    color: colors.primary,
     fontWeight: '700',
   },
   listContent: {
@@ -233,6 +304,11 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  rowMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   rowName: {
     color: colors.text,
     fontSize: 15,
@@ -255,6 +331,11 @@ const styles = StyleSheet.create({
   badgeDislike: {
     backgroundColor: colors.dislike + '33',
   },
+  revoteBadge: {
+    backgroundColor: '#a855f733',
+    borderWidth: 1,
+    borderColor: '#a855f766',
+  },
   badgeText: {
     fontSize: 11,
     fontWeight: '700',
@@ -263,6 +344,10 @@ const styles = StyleSheet.create({
   timeText: {
     color: colors.textMuted,
     fontSize: 12,
+  },
+  lastViewedText: {
+    color: colors.textSecondary,
+    fontSize: 11,
   },
   emptySection: {
     paddingHorizontal: 16,

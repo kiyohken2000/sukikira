@@ -74,6 +74,7 @@ export default function CommentItem({
   isMine = false,
   isReplyToMe = false,
   upvoteChange = 0,
+  isNew = false,
 }) {
   const { addNgWord } = useSettings()
   const [voted, setVoted] = useState(votedType)
@@ -176,6 +177,11 @@ export default function CommentItem({
           {isReplyToMe && !isMine && (
             <View style={styles.badgeReply}>
               <Text style={styles.badgeReplyText}>返信</Text>
+            </View>
+          )}
+          {isNew && (
+            <View style={styles.badgeNew}>
+              <Text style={styles.badgeNewText}>NEW</Text>
             </View>
           )}
         </View>
@@ -348,6 +354,19 @@ const styles = StyleSheet.create({
   badgeReplyText: {
     fontSize: 10,
     color: '#a78bfa',
+    fontWeight: '700',
+  },
+  badgeNew: {
+    backgroundColor: '#3b82f633',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: '#3b82f666',
+  },
+  badgeNewText: {
+    fontSize: 10,
+    color: '#3b82f6',
     fontWeight: '700',
   },
   menuBtn: {
