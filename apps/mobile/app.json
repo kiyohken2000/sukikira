@@ -41,7 +41,8 @@
       "userInterfaceStyle": "automatic",
       "permissions": [
         "VIBRATE",
-        "CAMERA"
+        "CAMERA",
+        "com.android.vending.BILLING"
       ]
     },
     "packagerOpts": {
