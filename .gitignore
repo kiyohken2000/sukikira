@@ -18,8 +18,6 @@ apps/mobile/ios/
 .env.local
 .env.*.local
 
-# RevenueCat API keys
-apps/mobile/src/config/revenuecat.js
 
 # Logs
 *.log
