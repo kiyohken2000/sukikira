@@ -201,6 +201,30 @@
 
 ---
 
+### ダークモード/ライトモード切り替え
+
+設定画面でテーマを切り替えられるようにする。
+
+**方針:**
+- `ThemeContext.js` 新規作成。`useColors()` フックで現在テーマの colors を返す
+- テーマ設定: `'dark'` | `'light'` | `'auto'`（auto = OS設定に追従、`useColorScheme()`）
+- AsyncStorage キー: `@sukikira:theme`
+- `theme/colors.js` に `darkColors`（現行）+ `lightColors` を定義
+- 全コンポーネント（31ファイル）の `import { colors }` → `useColors()` に置き換え
+  - `StyleSheet.create` を `createStyles(colors)` ファクトリに変更し `useMemo` でキャッシュ
+- Settings.js に「テーマ」セクション追加（ダーク / ライト / 自動 の3択）
+- ステータスバー: ライト時 `dark-content`、ダーク時 `light-content`
+
+**実装タスク:**
+- [ ] `theme/colors.js` に `lightColors` 定義追加
+- [ ] `contexts/ThemeContext.js` 新規作成（ThemeProvider, useColors, useTheme）
+- [ ] App.js に ThemeProvider 追加
+- [ ] 全31ファイルの colors 参照を useColors() に移行
+- [ ] Settings.js にテーマ切り替え UI 追加
+- [ ] StatusBar 動的切り替え
+
+---
+
 ## 修正済みバグ（セッション12）
 
 | # | バグ内容 | 原因 | 修正 |
