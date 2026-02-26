@@ -65,6 +65,7 @@ export default function Home() {
   const [nextPages, setNextPages] = useState({})
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [, setTick] = useState(0) // フォーカス時に残り時間等を再計算するためのダミー state
   const [error, setError] = useState(null)
 
   const load = useCallback(async (type) => {
@@ -102,6 +103,7 @@ export default function Home() {
 
   useFocusEffect(
     useCallback(() => {
+      setTick(t => t + 1) // 残り時間・最終閲覧を再計算
       if (!data[activeTab]) {
         load(activeTab)
       }

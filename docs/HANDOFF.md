@@ -1,6 +1,6 @@
 # セッション引継ぎドキュメント
 
-最終更新: 2026-02-23 (セッション10)
+最終更新: 2026-02-26 (セッション11)
 
 ---
 
@@ -138,6 +138,11 @@ NavigationContainer
 - 例: `/people/result/新垣結衣/?nxc=42261` → 20件取得
 - `parseNextCursor(html)` で `?nxc=(\d+)` を抽出
 - ページ末尾（最古）では `?nxc=` が出現しない → `nextCursor = null`
+- **Cloudflare WAF が `?nxc=` をブロック中**（`?cm` にリダイレクト）。実ブラウザ（cf_clearance あり）のみ通過
+- 2ページ目以降は個別コメント API (`/p/{pid}/c/{cid}/t/{sk_token}`) で1件ずつ取得
+- 個別 API は upvote/downvote/token を含まない → 2ページ目以降はグレーアウト表示
+- Workers プロキシ・WebView プロキシ・URL エンコードバイパス全て検証済み・不可能と確定
+- 詳細: `docs/HANDOFF_PAGINATION.md`
 
 ### コメント good/bad 投票
 - エンドポイント: `POST https://api.suki-kira.com/comment/vote?xdate={xdate}&evl={like|dislike}`
@@ -233,7 +238,7 @@ const getCommentVoted = useCallback((commentId) => commentVotedRef.current[comme
 | `getRanking` | `(type, page=1)` | `{ items, nextPage }` |
 | `search` | `(query)` | `item[]` |
 | `getComments` | `(name)` | `{ resultInfo, comments, nextCursor, notFound? }` |
-| `getMoreComments` | `(name, cursor)` | `{ comments, nextCursor }` |
+| `getMoreComments` | `(name, cursor, pid, skToken)` | `{ comments, nextCursor }` |
 | `vote` | `(name, voteType)` | `{ resultInfo, comments, nextCursor }` |
 | `voteComment` | `(pidHash, commentId, voteType, token, xdate)` | `void` |
 | `postComment` | `(name, commentBody, commentType='1')` | `{ resultInfo, comments }` |

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useCallback } from 'react'
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   StyleSheet,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useNavigation, useScrollToTop } from '@react-navigation/native'
+import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { colors } from '../../theme'
 import { useSettings } from '../../contexts/SettingsContext'
@@ -110,6 +110,13 @@ export default function History() {
   const sectionListRef = useRef(null)
   useScrollToTop(sectionListRef)
   const [activeTab, setActiveTab] = useState('history')
+  const [, setTick] = useState(0)
+
+  useFocusEffect(
+    useCallback(() => {
+      setTick(t => t + 1) // 残り時間・最終閲覧を再計算
+    }, []),
+  )
 
   const goToDetails = (name, imageUrl) => {
     navigation.navigate('Details', { name, imageUrl: imageUrl || undefined })

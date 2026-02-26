@@ -112,7 +112,7 @@ commentVote-{like|dislike}-{commentId}-{likeCount}-{dislikeCount}-{token}
 
 ## 棄却されたアプローチ
 
-### ~~1. WebView で ?nxc= ページネーション~~
+### ~~1. WebView で ?nxc= ページネーション（window.location.href）~~
 **棄却理由:** WebView + デスクトップ UA でも `?nxc=` は `?cm` にリダイレクトされる。
 同一セッション内のナビゲーション（cookie 保持）でも同様。
 テスト画面: `apps/mobile/src/scenes/debug/WebViewTest.js`
@@ -127,6 +127,41 @@ upvote/downvote を返す API は存在しない。
 ### ~~4. good/bad POST から投票数取得~~
 **棄却理由:** レスポンスは `0` or `5` のみ。投票数は含まれない。
 
+### ~~5. WebView 内 fetch("/?nxc=...")~~
+**棄却理由（2026-02-25 実測）:** WebView 内で `fetch(url, {credentials:'include'})` を実行。
+`redirected: true`, `finalUrl: .../?cm`。同一オリジン・cookie 共有でもリダイレクトされる。
+
+### ~~6. DOM `<a rel="next">` の .click() で遷移~~
+**棄却理由（2026-02-25 実測）:** ページネーションリンクは DOM に存在する:
+```html
+<a href="/people/result/木村拓哉/?nxc=145521" class="page-link" data-ci-pagination-page="5410" rel="next">前へ ›</a>
+```
+`.click()` でネイティブナビゲーションを発火 → Nav ログ:
+```
+Nav: .../木村拓哉/?nxc=145521 (loading=false)
+Nav: .../木村拓哉/?cm (loading=true)    ← サーバーサイドリダイレクト
+```
+DOM クリックでも `?cm` にリダイレクトされる。**手法は無関係、WAF がパラメータ自体をブロック**。
+
+### ~~7. WebView の cf_clearance cookie（非表示・可視 両方テスト済み）~~
+**確認（2026-02-25 実測）:**
+- 非表示 WebView (0x0, opacity:0): 12 cookies、cf_clearance なし
+- **可視 WebView (250px)**: 24 cookies（広告系追加）、**cf_clearance なし**
+- Selenium (実Chrome): cf_clearance **自動発行**（チャレンジなし）
+
+**結論:** Cloudflare Managed Challenge（不可視 Turnstile）は実 Chrome プロセスでのみ通過する。
+Android WebView は Chrome ベースだがフィンガープリントが異なり、cf_clearance が発行されない。
+**WebView 経由での ?nxc= ページネーション突破は不可能。**
+
+### ~~8. 個別コメントAPI URL で Cloudflare チャレンジを可視 WebView に表示~~
+**棄却理由（2026-02-25 実測）:**
+- `/p/{pid}/c/{cid}/t/{sk_token}` を可視 WebView で読み込み
+- `htmlLength: 509` — Cloudflare チャレンジページが**表示された**（`cf_challenge` フェーズ検出）
+- しかし Turnstile は**解決されなかった** — ページは challenge のまま遷移しない
+- Cookie 確認: 22 cookies、**cf_clearance なし**
+- **結論:** WebView でチャレンジページを表示しても、Turnstile は解けない。
+  Cloudflare は WebView の fingerprint を実 Chrome と区別しており、チャレンジ自体を通過させない。
+
 ## 運営によるブロックの可能性
 
 アプリをストアに公開した**翌日**から Cloudflare の挙動が変わった（空ボディ返却、`?nxc=` ブロック）。
@@ -136,6 +171,7 @@ upvote/downvote を返す API は存在しない。
 - タイミングがアプリ公開直後と一致
 - `?nxc=` パラメータだけをピンポイントでリダイレクトするのは WAF ルールの典型パターン
 - UA なし / 非ブラウザからのアクセスを弾く設定も運営側で可能
+- コメントページネーションだけがブロックされ、ランキングのページネーションは正常動作 → コメント大量取得を狙い撃ち
 
 **偶然の可能性:**
 - Cloudflare の Bot Fight Mode が自動でセキュリティレベルを上げた
@@ -143,86 +179,87 @@ upvote/downvote を返す API は存在しない。
 
 **留意事項:**
 - 技術的に回避しても、いたちごっこになるリスクがある
-- 個別コメント API (`/p/{pid}/c/{cid}/t/{sk_token}`) はまだ生きている
 - 突破を試みる前に「突破して使うべきか」の判断も必要
+
+## 棄却されたアプローチ（追加分: 2026-02-26）
+
+### ~~9. Cloudflare Workers プロキシ~~
+**棄却理由（2026-02-26 実測）:**
+- Workers をデプロイし `/batch` エンドポイントで個別コメント API をバッチ取得する方式を実装
+- Workers 内の `fetch()` でも suki-kira.com から Cloudflare チャレンジ（"Just a moment..."、403）が返る
+- result ページ、個別コメント API ともに Workers からはアクセス不可
+- KV キャッシュ付きの実装を行ったが、そもそもオリジンからデータを取得できないため無意味
+- **結論:** Workers の IP レンジも Cloudflare にブロックされている
+
+### ~~10. expo-web-browser (Chrome Custom Tabs) プロキシ~~
+**棄却理由（2026-02-26 検討）:**
+- Chrome Custom Tabs は実 Chrome プロセスなので cf_clearance は取得可能
+- しかし JS インジェクション不可・DOM 読み取り不可・Cookie 読み出し不可
+- Workers ページを中継に使う案もクロスオリジンで失敗
+- **結論:** データをアプリに戻す手段がない
+
+### ~~11. WebView プロキシ（非表示 WebView で個別 API fetch）~~
+**棄却理由（2026-02-26 実測）:**
+- WebView で result ページをロード後、同一オリジン fetch で個別コメント API にアクセス → **成功**
+- ただし、アプリの通常 fetch でも個別コメント API は現在動作中（curl/Workers からのみブロック）
+- WebView プロキシにしても得られるデータは現行と同一（本文のみ、upvote/downvote なし）
+- **結論:** 現行方式と同じ結果のため、追加の複雑さに見合わない
+
+### ~~12. URL エンコードで WAF バイパス~~
+**棄却理由（2026-02-26 実測）:** WebView 内 fetch で8パターンをテスト:
+
+| パターン | WAF 回避 | サーバー認識 |
+|---|---|---|
+| `?nxc=` (通常) | ✗ リダイレクト | - |
+| `?%6exc=` (n エンコード) | ✗ リダイレクト | - |
+| `?%6E%78%63=` (全エンコード) | ✗ リダイレクト | - |
+| `?NXC=` (大文字) | ✓ WAF 通過 | ✗ サーバー無視 |
+| `?Nxc=` (混合) | ✓ WAF 通過 | ✗ サーバー無視 |
+| `?nxc%20=` (スペース) | ✓ WAF 通過 | ✗ サーバー無視 |
+| `/{nxc}/` (パス埋め込み) | ✓ WAF 通過 | ✗ サーバー無視 |
+| `?cm#nxc=` (フラグメント) | ✓ WAF 通過 | ✗ サーバー無視 |
+
+- WAF は URL デコード後の小文字 `nxc` をパターンマッチ → エンコード系は全滅
+- 大文字等で WAF を回避できても、サーバーは小文字 `nxc` のみ認識 → ページネーションが効かない
+- **結論:** WAF が弾くものとサーバーが認識するものが完全に一致。バイパス不可能
 
 ## 未探索の方向性
 
-### 1. cf_clearance cookie の明示的取得（最有力）
+### ~~1. Selenium で cf_clearance 取得~~
+**検証済み（2026-02-25 実測）:** `scripts/test_cf_clearance.py`
+- Selenium (実Chrome): cf_clearance **自動発行**、`?nxc=` で2ページ目取得**成功**
+  - コメント20件、ID範囲: 145520~145501（1ページ目: 145543~145521）
+- requests に cookie を引き継ぎ: **403**（cf_clearance はブラウザセッション/TLS に紐付け）
+- **結論:** cf_clearance は実 Chrome でのみ有効。外部 HTTP client には引き継げない
 
-ブラウザが `?nxc=` で正常動作する**唯一の条件**は `cf_clearance` cookie。
-WebView テストでは cf_clearance が発行されなかった可能性がある（JS チャレンジページが表示されなかった）。
+### 残る選択肢
 
-**調査案:**
-- WebView で Cloudflare チャレンジページを**意図的に**トリガーする
-  - 例: 短時間に大量リクエストを送って rate limit を引く
-  - または `/__cf_chl_tk` のようなチャレンジ URL に直接アクセス
-- チャレンジ解決後に `cf_clearance` cookie が発行されるか確認
-- `document.cookie` で `cf_clearance` を読み取り、以降の fetch に付与
-- `@react-native-cookies/cookies` (CookieManager) で WebView → fetch への cookie 受け渡し
+なし。全ての合理的なアプローチを検証済み。
 
-**Python で先行検証可能:**
-```python
-# Selenium/Playwright で cf_clearance を取得し、
-# requests で ?nxc= にアクセスできるか確認
-```
+## 最終結論
 
-### 2. WebView 内で「次へ」リンクをクリック
+**?nxc= ページネーションによる upvote/downvote 取得は技術的に不可能。**
 
-`window.location.href = "?nxc=..."` ではなく、実際の DOM 要素（`<a rel="next">`）をクリックする。
-ブラウザのネイティブナビゲーションなら Cloudflare が許可する可能性。
+### 現行方式（確定）
+- **1ページ目（20件）**: 完全表示（upvote/downvote/token あり、good/bad 投票可能）
+- **2ページ目以降**: 個別コメント API で取得（本文・日時・派閥のみ、upvote/downvote なし → グレーアウト表示）
+- `getMoreComments()` は**動作中**（アプリの fetch は個別コメント API にアクセス可能。curl/Workers からのみブロック）
 
-**調査案:**
-```javascript
-// WebView inject
-var nextLink = document.querySelector('a[rel="next"]');
-if (nextLink) nextLink.click();
-```
-
-### 3. WebView を fetch クライアントとして使う
-
-ページのナビゲーションではなく、WebView 内で `fetch()` を実行して結果を postMessage で返す。
-WebView 内の fetch はブラウザ環境と同等なので、cf_clearance が自動付与される可能性。
-
-**調査案:**
-```javascript
-// WebView inject
-fetch("/?nxc=145518").then(r => r.text()).then(html => {
-  window.ReactNativeWebView.postMessage(JSON.stringify({ html: html }));
-});
-```
-
-### 4. Cloudflare Workers プロキシ
-
-最終手段。Cloudflare Workers でプロキシを立てる:
-- Workers が `?nxc=` にアクセスし、結果を JSON で返す
-- ただしサイトに負荷をかけるため倫理的に要検討
-- Cloudflare が Workers からのリクエストもブロックする可能性
-
-### 5. ハイブリッド方式で UX 改善（保険）
-
-技術的解決が困難な場合の UX 側アプローチ:
-- 1ページ目（20件）: 完全表示（upvote/downvote/token あり）← WebView 経由
-- 2ページ目以降: 個別コメント API（本文のみ、upvote/downvote なし）← 現行方式
-- グレーアウトの代わりに「投票数はページ読み込みで取得」等の説明表示
-
-## 推奨する次の調査ステップ
-
-1. **WebView 内 fetch テスト** — WebView 内で `fetch("/?nxc=...")` を実行し、
-   2ページ目のコメントが取得できるか確認（テスト画面にボタン追加）
-2. **「次へ」リンク DOM クリック** — `a[rel="next"]` の `.click()` で遷移した場合の挙動
-3. **cf_clearance の Selenium 検証** — Python + Selenium で cf_clearance を取得し、
-   requests で `?nxc=` にアクセス可能か確認
-4. 上記全て失敗した場合 → ハイブリッド方式で UX 改善
+### ブロックの構造
+- `?nxc=` パラメータ: WAF がリダイレクト（cf_clearance ありの実ブラウザのみ通過）
+- 個別コメント API: アプリ fetch は通過、curl/Workers はブロック
+- ランキングページネーション: 正常動作（コメントのみ狙い撃ち）
 
 ## 関連ファイル
 
 | ファイル | 説明 |
 |---|---|
-| `apps/mobile/src/utils/sukikira.js` | API モジュール（`getMoreComments` が暫定実装） |
+| `apps/mobile/src/utils/sukikira.js` | API モジュール（`getMoreComments` が動作中） |
 | `apps/mobile/src/scenes/details/Details.js` | 詳細画面（`loadMore` で呼び出し） |
 | `apps/mobile/src/components/CommentItem/CommentItem.js` | コメント表示（グレーアウト処理） |
-| `apps/mobile/src/scenes/debug/WebViewTest.js` | **WebView 検証テスト画面**（設定→バージョン5回タップ） |
+| `apps/mobile/src/scenes/debug/WebViewTest.js` | **WebView 検証テスト画面**（設定→バージョン5回タップ、テスト1-9） |
+| `workers/comment-proxy/` | Workers プロキシ（テストコード。Cloudflare にブロックされるため未使用） |
+| `scripts/test_cf_clearance.py` | Selenium cf_clearance テスト |
 | `scripts/investigate_upvote_api.py` | API エンドポイント調査スクリプト |
 | `scripts/out/people-result.js` | people-result.js 全文（18,017文字） |
 | `scripts/out/investigate_upvote_api.txt` | API 調査結果 |

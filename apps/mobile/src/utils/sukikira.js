@@ -352,7 +352,9 @@ export const vote = async (name, voteType) => {
 
   // 結果ページが返った場合（既投票済み）
   if (/好き派:/.test(pageHtml)) {
-    return { resultInfo: parseResult(pageHtml), comments: parseComments(pageHtml) }
+    const cmts = parseComments(pageHtml)
+    const nextCursor = cmts.length >= 20 ? parseNextCursor(pageHtml) : null
+    return { resultInfo: parseResult(pageHtml), comments: cmts, nextCursor }
   }
 
   const { id, auth1, auth2, authR } = parseVoteTokens(pageHtml)
@@ -385,16 +387,20 @@ export const vote = async (name, voteType) => {
 
   // POSTレスポンスに結果が含まれていればそのまま返す
   if (html && /好き派:/.test(html)) {
-    return { resultInfo: parseResult(html), comments: parseComments(html) }
+    const cmts = parseComments(html)
+    const nextCursor = cmts.length >= 20 ? parseNextCursor(html) : null
+    return { resultInfo: parseResult(html), comments: cmts, nextCursor }
   }
 
   // POSTレスポンスが空の場合、結果ページを再取得（投票済みなので result ページが返る）
   const fallbackHtml = await get(`/people/result/${encodedName}`)
   if (/好き派:/.test(fallbackHtml)) {
-    return { resultInfo: parseResult(fallbackHtml), comments: parseComments(fallbackHtml) }
+    const cmts = parseComments(fallbackHtml)
+    const nextCursor = cmts.length >= 20 ? parseNextCursor(fallbackHtml) : null
+    return { resultInfo: parseResult(fallbackHtml), comments: cmts, nextCursor }
   }
 
-  return { resultInfo: null, comments: [] }
+  return { resultInfo: null, comments: [], nextCursor: null }
 }
 
 // -----------------------------------------------------------------------

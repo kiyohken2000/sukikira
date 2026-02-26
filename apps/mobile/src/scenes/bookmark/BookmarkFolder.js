@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from 'react'
+import React, { useState, useCallback, useRef, useMemo } from 'react'
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useNavigation, useRoute, useScrollToTop } from '@react-navigation/native'
+import { useNavigation, useRoute, useFocusEffect, useScrollToTop } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { colors } from '../../theme'
 import { useSettings } from '../../contexts/SettingsContext'
@@ -52,6 +52,13 @@ export default function BookmarkFolder() {
   const { bookmarkFolders, removeFromFolder, voted, commentHistory, getVotedAt, getLastViewed } = useSettings()
   const flatListRef = useRef(null)
   useScrollToTop(flatListRef)
+  const [, setTick] = useState(0)
+
+  useFocusEffect(
+    useCallback(() => {
+      setTick(t => t + 1) // 残り時間・最終閲覧を再計算
+    }, []),
+  )
 
   const commentedNames = useMemo(() => {
     const set = new Set()

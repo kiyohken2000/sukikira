@@ -139,7 +139,10 @@ export default function Details() {
     bookmarkFolders, addBookmarkFolder, addToFolder, removeFromFolder,
     getLastViewed, recordLastViewed,
   } = useSettings()
-  const voteStatus = voted[name]
+  // voted memo はタイマーで更新されないため、getVotedAt で24h経過を直接確認
+  const votedAt = getVotedAt(name)
+  const isExpired = votedAt && (Date.now() - votedAt >= VOTE_EXPIRE_MS)
+  const voteStatus = isExpired ? null : voted[name]
 
   const [resultInfo, setResultInfo] = useState(null)
   const [comments, setComments] = useState([])
@@ -298,7 +301,7 @@ export default function Details() {
     } finally {
       setLoadingMore(false)
     }
-  }, [name, nextCursor, loadingMore])
+  }, [name, nextCursor, loadingMore, resultInfo])
 
   const onCommentVote = useCallback(async (commentId, voteType, token) => {
     if (!resultInfo?.pidHash || !resultInfo?.xdate) return

@@ -130,6 +130,29 @@ with urllib.request.urlopen(req, timeout=15) as r:
 
 Python でも 0 バイトなら、サーバー/Cloudflare 側の問題。アプリでは対処不可能なので待つしかない。
 
+## Cloudflare Workers からのアクセス（2026-02-26 検証）
+
+Workers (`sukikira-comment-proxy.votepurchase.workers.dev`) をデプロイしてテスト。
+Workers 内の `fetch()` でも suki-kira.com から **Cloudflare チャレンジ（"Just a moment..."、403）** が返る。
+
+- result ページ (`/people/result/{name}`) → チャレンジ
+- 個別コメント API (`/p/{pid}/c/{cid}/t/{sk_token}`) → チャレンジ
+- Workers からの投票 POST → チャレンジ（result ページを取得できないため投票フローも不可）
+
+**結論:** Workers の IP レンジも Cloudflare にブロックされている。
+Pages Functions も同じランタイムのため同様にブロックされると推測。
+
+## アクセス元別のブロック状況（2026-02-26 時点）
+
+| アクセス元 | result ページ | 個別コメント API | `?nxc=` |
+|---|---|---|---|
+| アプリ fetch (ヘッダーなし) | ✓ 成功 | ✓ 成功 | ✗ `?cm` にリダイレクト |
+| アプリ fetch (カスタムヘッダー付き) | ✗ 空ボディ | 未テスト | ✗ リダイレクト |
+| WebView (同一オリジン fetch) | ✓ 成功 | ✓ 成功 | ✗ `?cm` にリダイレクト |
+| Workers fetch | ✗ チャレンジ | ✗ チャレンジ | ✗ チャレンジ |
+| curl | ✗ チャレンジ | ✗ チャレンジ | ✗ チャレンジ |
+| 実ブラウザ (Chrome) | ✓ 成功 | ✓ 成功 | ✓ 成功 |
+
 ## 時系列（2026-02-25 の事例）
 
 1. 投票エラー発生。ストア版でも再現 → コード変更が原因ではない

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react'
+import React, { useState, useCallback, useMemo, useRef } from 'react'
 import {
   View,
   TextInput,
@@ -10,7 +10,7 @@ import {
   Keyboard,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useNavigation, useScrollToTop } from '@react-navigation/native'
+import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { colors } from '../../theme'
 import { search } from '../../utils/sukikira'
@@ -58,6 +58,13 @@ export default function Search() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [searched, setSearched] = useState(false)
+  const [, setTick] = useState(0)
+
+  useFocusEffect(
+    useCallback(() => {
+      setTick(t => t + 1) // 残り時間・最終閲覧を再計算
+    }, []),
+  )
 
   const onClear = () => {
     setQuery('')

@@ -6,6 +6,10 @@ import { WebView } from 'react-native-webview'
 const DESKTOP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 
+// iOS Safari の正確な UA（WKWebView デフォルトとの違い: "Version/X.X Safari/605.1.15" が付く）
+const IOS_SAFARI_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15'
+
 const NAME = '木村拓哉'
 const BASE = 'https://suki-kira.com'
 const RESULT_URL = `${BASE}/people/result/${encodeURIComponent(NAME)}`
@@ -19,6 +23,19 @@ const INJECT_JS = `
 (function() {
   try {
     var html = document.body.innerHTML;
+    var title = document.title || '';
+
+    // Cloudflare チャレンジページ検出（本文が極端に短い + チャレンジ系タイトル）
+    if (html.length < 5000 && (title.indexOf('Just a moment') !== -1 || title === '')) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        phase: 'cf_challenge',
+        url: location.href,
+        title: title,
+        htmlLength: html.length
+      }));
+      return;
+    }
+
     var isResult = html.indexOf('好き派:') !== -1;
     var isVote = !isResult && html.indexOf('name="auth1"') !== -1;
 
@@ -157,6 +174,7 @@ export default function WebViewTest() {
   const [currentUrl, setCurrentUrl] = useState('')
   const [webviewKey, setWebviewKey] = useState(0) // key を変えて WebView を強制再マウント
   const [lastResult, setLastResult] = useState(null)
+  const [showWebView, setShowWebView] = useState(false) // 可視 WebView モード
 
   const log = useCallback((msg) => {
     const ts = new Date().toLocaleTimeString('ja-JP')
@@ -188,6 +206,413 @@ export default function WebViewTest() {
 
   const loadCommentPage = () => navigate(`${RESULT_URL}/?cm`)
 
+  // テスト4: WebView 内で fetch("/?nxc=...") を実行
+  const fetchNextPage = () => {
+    if (!lastResult?.nextCursor) { log('ERROR: nextCursor がない'); return }
+    const nxc = lastResult.nextCursor
+    log(`fetch テスト開始: ?nxc=${nxc}`)
+    const js = `
+    (function() {
+      try {
+        fetch("${RESULT_URL}/?nxc=${nxc}", { credentials: 'include' })
+          .then(function(r) {
+            var status = r.status;
+            var redirected = r.redirected;
+            var finalUrl = r.url;
+            return r.text().then(function(html) {
+              // コメント数をカウント
+              var commentMatches = html.match(/comment-container c\\d+/g);
+              var commentCount = commentMatches ? commentMatches.length : 0;
+              // nxc= の出現数
+              var nxcMatches = html.match(/nxc=\\d+/g);
+              var nxcCount = nxcMatches ? nxcMatches.length : 0;
+              // 好き派: の存在確認
+              var isResult = html.indexOf('好き派:') !== -1;
+              // コメントIDを抽出
+              var ids = [];
+              if (commentMatches) {
+                commentMatches.forEach(function(m) {
+                  var idM = m.match(/c(\\d+)/);
+                  if (idM) ids.push(idM[1]);
+                });
+              }
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                phase: 'fetch_test',
+                nxc: "${nxc}",
+                status: status,
+                redirected: redirected,
+                finalUrl: finalUrl,
+                htmlLength: html.length,
+                isResult: isResult,
+                commentCount: commentCount,
+                nxcCount: nxcCount,
+                idRange: ids.length > 0 ? ids[0] + '~' + ids[ids.length-1] : 'none',
+                snippet: html.substring(0, 300)
+              }));
+            });
+          })
+          .catch(function(e) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              phase: 'fetch_test', error: e.message
+            }));
+          });
+      } catch(e) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'fetch_test', error: e.message
+        }));
+      }
+    })();
+    true;`
+    webviewRef.current?.injectJavaScript(js)
+  }
+
+  // テスト5: DOM の <a rel="next"> を .click() で遷移
+  const clickNextLink = () => {
+    if (!lastResult?.nextCursor) { log('ERROR: nextCursor がない'); return }
+    log('DOM .click() テスト開始')
+    const nxc = lastResult.nextCursor
+    const js = `
+    (function() {
+      try {
+        // まず全ての a[rel="next"] と nxc リンクを調査
+        var allRelNext = document.querySelectorAll('a[rel="next"]');
+        var allNxcLinks = document.querySelectorAll('a[href*="nxc="]');
+        var debugInfo = {
+          relNextCount: allRelNext.length,
+          nxcLinkCount: allNxcLinks.length,
+          relNextDetails: [],
+          nxcLinkDetails: []
+        };
+        allRelNext.forEach(function(el) {
+          debugInfo.relNextDetails.push({
+            tag: el.tagName,
+            href: el.getAttribute('href'),
+            text: el.textContent.trim().substring(0, 50),
+            outerHTML: el.outerHTML.substring(0, 200),
+            parentTag: el.parentElement ? el.parentElement.tagName : null,
+            parentClass: el.parentElement ? el.parentElement.className : null
+          });
+        });
+        allNxcLinks.forEach(function(el) {
+          debugInfo.nxcLinkDetails.push({
+            href: el.getAttribute('href'),
+            text: el.textContent.trim().substring(0, 50),
+            rel: el.getAttribute('rel'),
+            outerHTML: el.outerHTML.substring(0, 200)
+          });
+        });
+
+        // クリック対象を決定
+        var target = null;
+        if (allNxcLinks.length > 0) {
+          // nxc= を含むリンクを優先（実際の href があるもの）
+          target = allNxcLinks[allNxcLinks.length - 1];
+        } else if (allRelNext.length > 0 && allRelNext[0].getAttribute('href')) {
+          target = allRelNext[0];
+        }
+
+        if (target) {
+          debugInfo.clickTarget = {
+            href: target.getAttribute('href'),
+            text: target.textContent.trim(),
+            outerHTML: target.outerHTML.substring(0, 200)
+          };
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            phase: 'click_test_start',
+            debug: debugInfo
+          }));
+          target.click();
+        } else {
+          // fallback: nxc URL を href にセットした新しいリンクを作って click
+          debugInfo.fallbackCreate = true;
+          var a = document.createElement('a');
+          a.href = location.pathname + '?nxc=${nxc}';
+          a.rel = 'next';
+          document.body.appendChild(a);
+          debugInfo.clickTarget = { href: a.href, synthetic: true };
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            phase: 'click_test_start',
+            debug: debugInfo
+          }));
+          a.click();
+        }
+      } catch(e) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'click_test_start', error: e.message
+        }));
+      }
+    })();
+    true;`
+    webviewRef.current?.injectJavaScript(js)
+  }
+
+  // テスト9: URL エンコードで WAF バイパス試行
+  const fetchNxcBypass = () => {
+    if (!lastResult?.nextCursor) { log('ERROR: nextCursor がない'); return }
+    const nxc = lastResult.nextCursor
+    log(`WAF バイパステスト開始: nxc=${nxc}`)
+    const js = `
+    (function() {
+      try {
+        var nxc = "${nxc}";
+        var base = location.pathname;
+        var variants = [
+          { label: 'normal',        url: base + '?nxc=' + nxc },
+          { label: '%6exc (n encoded)', url: base + '?%6exc=' + nxc },
+          { label: '%6E%78%63 (all encoded)', url: base + '?%6E%78%63=' + nxc },
+          { label: 'NXC (uppercase)', url: base + '?NXC=' + nxc },
+          { label: 'Nxc (mixed)',    url: base + '?Nxc=' + nxc },
+          { label: 'nxc%20= (space)', url: base + '?nxc%20=' + nxc },
+          { label: '/nxc/ (path)',   url: base + '/' + nxc + '/' },
+          { label: '#nxc (fragment)', url: base + '?cm#nxc=' + nxc },
+        ];
+        var results = [];
+        var done = 0;
+        variants.forEach(function(v) {
+          fetch(v.url, { credentials: 'include', redirect: 'follow' })
+            .then(function(r) {
+              return r.text().then(function(html) {
+                var ids = [];
+                var m;
+                var re = /comment-container c(\\d+)/g;
+                while ((m = re.exec(html)) !== null) ids.push(m[1]);
+                results.push({
+                  label: v.label,
+                  url: v.url,
+                  status: r.status,
+                  redirected: r.redirected,
+                  finalUrl: r.url,
+                  isResult: html.indexOf('好き派:') !== -1,
+                  commentCount: ids.length,
+                  idRange: ids.length > 0 ? ids[0] + '~' + ids[ids.length-1] : 'none',
+                  htmlLen: html.length,
+                  isChallenge: html.indexOf('Just a moment') !== -1
+                });
+                done++;
+                if (done === variants.length) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({
+                    phase: 'nxc_bypass',
+                    nxc: nxc,
+                    results: results
+                  }));
+                }
+              });
+            })
+            .catch(function(e) {
+              results.push({ label: v.label, url: v.url, error: e.message });
+              done++;
+              if (done === variants.length) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  phase: 'nxc_bypass',
+                  nxc: nxc,
+                  results: results
+                }));
+              }
+            });
+        });
+      } catch(e) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'nxc_bypass', error: e.message
+        }));
+      }
+    })();
+    true;`
+    webviewRef.current?.injectJavaScript(js)
+  }
+
+  // テスト7: WebView 内から同一オリジン fetch で個別コメントAPI
+  const fetchCommentApi = () => {
+    if (!lastResult?.pid || !lastResult?.skToken || !lastResult?.comments?.length) {
+      log('ERROR: result ページを先に読み込んでください')
+      return
+    }
+    const { pid, skToken, comments, nextCursor } = lastResult
+    // 1ページ目最後のコメントID - 1 = 2ページ目の最初
+    const lastCid = comments[comments.length - 1]?.id
+    const testCid = lastCid ? String(Number(lastCid) - 1) : '1'
+    log(`個別API fetch: pid=${pid}, cid=${testCid}`)
+    const js = `
+    (function() {
+      try {
+        var testIds = [${testCid}, ${Number(testCid) - 1}, ${Number(testCid) - 5}];
+        var results = [];
+        var done = 0;
+        testIds.forEach(function(cid) {
+          fetch("/p/${pid}/c/" + cid + "/t/${skToken}", { credentials: 'include' })
+            .then(function(r) {
+              return r.text().then(function(text) {
+                var parsed = null;
+                try { parsed = JSON.parse(text); } catch(e) {}
+                results.push({
+                  cid: cid,
+                  status: r.status,
+                  redirected: r.redirected,
+                  finalUrl: r.url,
+                  isJson: parsed !== null,
+                  isChallenge: text.indexOf('Just a moment') !== -1,
+                  bodyLen: text.length,
+                  data: parsed,
+                  snippet: parsed ? undefined : text.substring(0, 200)
+                });
+                done++;
+                if (done === testIds.length) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({
+                    phase: 'api_fetch_test',
+                    results: results
+                  }));
+                }
+              });
+            })
+            .catch(function(e) {
+              results.push({ cid: cid, error: e.message });
+              done++;
+              if (done === testIds.length) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  phase: 'api_fetch_test',
+                  results: results
+                }));
+              }
+            });
+        });
+      } catch(e) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'api_fetch_test', error: e.message
+        }));
+      }
+    })();
+    true;`
+    webviewRef.current?.injectJavaScript(js)
+  }
+
+  // テスト8: WebView 内でバッチ取得（20件、getMoreComments 相当）
+  const fetchBatchApi = () => {
+    if (!lastResult?.pid || !lastResult?.skToken || !lastResult?.comments?.length) {
+      log('ERROR: result ページを先に読み込んでください')
+      return
+    }
+    const { pid, skToken, comments } = lastResult
+    const lastCid = comments[comments.length - 1]?.id
+    const startId = lastCid ? Number(lastCid) - 1 : 0
+    if (startId < 1) { log('ERROR: startId < 1'); return }
+    log(`バッチ fetch: pid=${pid}, from=${startId}, count=20`)
+    const js = `
+    (function() {
+      try {
+        var pid = "${pid}";
+        var sk = "${skToken}";
+        var startId = ${startId};
+        var comments = [];
+        var misses = 0;
+        var id = startId;
+        var lowestId = startId;
+
+        function fetchNext() {
+          if (id < 1 || comments.length >= 20 || misses >= 10) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              phase: 'batch_test',
+              count: comments.length,
+              misses: misses,
+              lowestId: lowestId,
+              idRange: comments.length > 0 ? comments[0].id + '~' + comments[comments.length-1].id : 'none',
+              comments: comments.map(function(c) {
+                return { id: c.id, type: c.type, bodyLen: c.body ? c.body.length : 0, body: (c.body || '').substring(0, 50) };
+              })
+            }));
+            return;
+          }
+          fetch("/p/" + pid + "/c/" + id + "/t/" + sk, { credentials: 'include' })
+            .then(function(r) { return r.text(); })
+            .then(function(text) {
+              if (!text || text.length < 10 || text.indexOf('Just a moment') !== -1) {
+                misses++;
+              } else {
+                try {
+                  var data = JSON.parse(text);
+                  if (data && data.body) {
+                    comments.push({
+                      id: data.index || String(id),
+                      body: data.body.replace(/<[^>]+>/g, '').substring(0, 100),
+                      type: data.type === '1' ? 'like' : data.type === '0' ? 'dislike' : 'unknown',
+                      author: data.name_hash || '匿名',
+                      dateText: data.created_at || ''
+                    });
+                    lowestId = id;
+                    misses = 0;
+                  } else { misses++; }
+                } catch(e) { misses++; }
+              }
+              id--;
+              fetchNext();
+            })
+            .catch(function(e) {
+              misses++;
+              id--;
+              fetchNext();
+            });
+        }
+        fetchNext();
+      } catch(e) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'batch_test', error: e.message
+        }));
+      }
+    })();
+    true;`
+    webviewRef.current?.injectJavaScript(js)
+  }
+
+  // 可視モード切替
+  const toggleWebView = () => {
+    setShowWebView(v => {
+      const next = !v
+      log(`WebView ${next ? '可視' : '非表示'} モード`)
+      return next
+    })
+  }
+
+  // CF チャレンジ誘発: 個別コメントAPI URL を可視 WebView で開く
+  // ?nxc= は即リダイレクトされるが、/p/{pid}/c/{cid}/t/{token} は
+  // Cloudflare managed challenge が表示される → 解決で cf_clearance 発行
+  const loadCfChallenge = () => {
+    if (!lastResult?.pid || !lastResult?.skToken) {
+      log('CF Challenge: pid/skToken が必要。Result ページを読み込んでください')
+      return
+    }
+    // 存在するコメントIDを使う（1ページ目の最後のコメント）
+    const cid = lastResult.comments?.[lastResult.comments.length - 1]?.id || '1'
+    const url = `${BASE}/p/${lastResult.pid}/c/${cid}/t/${lastResult.skToken}`
+    log(`CF Challenge: 個別コメントAPIを可視 WebView で開く`)
+    log(`URL: ${url}`)
+    setShowWebView(true)
+    navigate(url, true)
+  }
+
+  // テスト6: Cookie 確認（cf_clearance の有無）
+  const checkCookies = () => {
+    log('Cookie 確認中...')
+    const js = `
+    (function() {
+      try {
+        var cookies = document.cookie;
+        var hasCfClearance = cookies.indexOf('cf_clearance') !== -1;
+        var cookieList = cookies.split(';').map(function(c) { return c.trim(); });
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'cookie_check',
+          hasCfClearance: hasCfClearance,
+          cookieCount: cookieList.length,
+          cookies: cookieList.filter(function(c) { return c.length > 0; }),
+          raw: cookies.substring(0, 500)
+        }));
+      } catch(e) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'cookie_check', error: e.message
+        }));
+      }
+    })();
+    true;`
+    webviewRef.current?.injectJavaScript(js)
+  }
+
   const onMessage = useCallback((event) => {
     try {
       const data = JSON.parse(event.nativeEvent.data)
@@ -208,6 +633,112 @@ export default function WebViewTest() {
 
       if (data.phase === 'error') {
         log(`ERROR: ${data.error}`)
+        return
+      }
+
+      if (data.phase === 'cf_challenge') {
+        log(`=== CF チャレンジ検出 ===`)
+        log(`URL: ${data.url}`)
+        log(`title: ${data.title}`)
+        log(`Turnstile 解決待ち... (自動で解決されるはず)`)
+        return
+      }
+
+      if (data.phase === 'fetch_test') {
+        log(`=== fetch テスト結果 ===`)
+        if (data.error) { log(`ERROR: ${data.error}`); return }
+        log(`nxc=${data.nxc}`)
+        log(`status: ${data.status}, redirected: ${data.redirected}`)
+        log(`finalUrl: ${data.finalUrl}`)
+        log(`HTML: ${data.htmlLength} chars, isResult: ${data.isResult}`)
+        log(`コメント数: ${data.commentCount}, nxc出現数: ${data.nxcCount}`)
+        log(`ID範囲: ${data.idRange}`)
+        if (data.htmlLength < 100) log(`snippet: ${data.snippet}`)
+        return
+      }
+
+      if (data.phase === 'click_test_start') {
+        log(`=== DOM .click() テスト ===`)
+        if (data.error) { log(`ERROR: ${data.error}`); return }
+        const d = data.debug || {}
+        log(`a[rel="next"]: ${d.relNextCount}個, a[href*="nxc="]: ${d.nxcLinkCount}個`)
+        if (d.relNextDetails?.length > 0) {
+          d.relNextDetails.forEach((el, i) => {
+            log(`  rel=next[${i}]: href=${el.href} text="${el.text}"`)
+            log(`    HTML: ${el.outerHTML}`)
+            log(`    parent: ${el.parentTag}.${el.parentClass}`)
+          })
+        }
+        if (d.nxcLinkDetails?.length > 0) {
+          d.nxcLinkDetails.forEach((el, i) => {
+            log(`  nxc[${i}]: href=${el.href} rel=${el.rel} text="${el.text}"`)
+            log(`    HTML: ${el.outerHTML}`)
+          })
+        }
+        if (d.clickTarget) {
+          log(`クリック対象: ${d.clickTarget.href}${d.clickTarget.synthetic ? ' (synthetic)' : ''}`)
+        }
+        if (d.fallbackCreate) log(`fallback: 合成リンク作成`)
+        log(`クリック実行 → ナビゲーション待ち...`)
+        return
+      }
+
+      if (data.phase === 'nxc_bypass') {
+        log(`=== WAF バイパステスト (nxc=${data.nxc}) ===`)
+        if (data.error) { log(`ERROR: ${data.error}`); return }
+        // 1ページ目の ID 範囲（比較用）
+        const p1Range = lastResult?.comments?.length
+          ? `${lastResult.comments[0].id}~${lastResult.comments[lastResult.comments.length - 1].id}`
+          : '?'
+        log(`1ページ目 ID範囲: ${p1Range}`)
+        data.results?.forEach(r => {
+          if (r.error) {
+            log(`  ${r.label}: ERROR ${r.error}`)
+          } else {
+            const isSamePage = r.idRange === p1Range
+            const icon = r.isChallenge ? 'CF' : r.redirected ? 'REDIR' : isSamePage ? 'SAME' : 'NEW?'
+            log(`  [${icon}] ${r.label}: ${r.commentCount}件 ${r.idRange} (${r.redirected ? 'redirected→' + r.finalUrl.split('/').pop() : 'no redirect'})`)
+          }
+        })
+        return
+      }
+
+      if (data.phase === 'api_fetch_test') {
+        log(`=== 個別API fetch テスト ===`)
+        if (data.error) { log(`ERROR: ${data.error}`); return }
+        data.results?.forEach(r => {
+          if (r.error) {
+            log(`  cid=${r.cid}: ERROR ${r.error}`)
+          } else {
+            log(`  cid=${r.cid}: status=${r.status} json=${r.isJson} challenge=${r.isChallenge} len=${r.bodyLen}`)
+            if (r.data) log(`    body: "${(r.data.body || '').substring(0, 60)}"`)
+            if (r.isChallenge) log(`    → Cloudflare チャレンジ`)
+            if (r.snippet) log(`    snippet: ${r.snippet.substring(0, 100)}`)
+          }
+        })
+        return
+      }
+
+      if (data.phase === 'batch_test') {
+        log(`=== バッチ fetch テスト ===`)
+        if (data.error) { log(`ERROR: ${data.error}`); return }
+        log(`取得: ${data.count}件, misses: ${data.misses}, lowestId: ${data.lowestId}`)
+        log(`ID範囲: ${data.idRange}`)
+        data.comments?.slice(0, 5).forEach(c => {
+          log(`  #${c.id} [${c.type}] "${c.body}"`)
+        })
+        if (data.count > 5) log(`  ... 他${data.count - 5}件`)
+        if (data.count === 0) log(`→ 全て失敗（Cloudflare ブロック中の可能性）`)
+        else log(`→ 成功！WebView 内 fetch で2ページ目取得可能`)
+        return
+      }
+
+      if (data.phase === 'cookie_check') {
+        log(`=== Cookie 確認 ===`)
+        if (data.error) { log(`ERROR: ${data.error}`); return }
+        log(`cf_clearance: ${data.hasCfClearance ? 'あり ✓' : 'なし ✗'}`)
+        log(`Cookie数: ${data.cookieCount}`)
+        data.cookies?.forEach(c => log(`  ${c}`))
         return
       }
 
@@ -266,30 +797,92 @@ export default function WebViewTest() {
 
       <View style={styles.buttons}>
         <TouchableOpacity style={styles.btn} onPress={loadResultPage}>
-          <Text style={styles.btnText}>1. Result ページ</Text>
+          <Text style={styles.btnText}>1. Result</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.btn, !lastResult?.nextCursor && styles.btnDisabled]}
           onPress={loadNextPage}
           disabled={!lastResult?.nextCursor}
         >
-          <Text style={styles.btnText}>2. ?nxc= 次ページ</Text>
+          <Text style={styles.btnText}>2. ?nxc=</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.btn} onPress={loadCommentPage}>
-          <Text style={styles.btnText}>3. ?cm ページ</Text>
+          <Text style={styles.btnText}>3. ?cm</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.buttons}>
+        <TouchableOpacity
+          style={[styles.btn, styles.btnNew, !lastResult?.nextCursor && styles.btnDisabled]}
+          onPress={fetchNextPage}
+          disabled={!lastResult?.nextCursor}
+        >
+          <Text style={styles.btnText}>4. fetch</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, styles.btnNew, !lastResult?.nextCursor && styles.btnDisabled]}
+          onPress={clickNextLink}
+          disabled={!lastResult?.nextCursor}
+        >
+          <Text style={styles.btnText}>5. click</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, styles.btnGreen, !currentUrl && styles.btnDisabled]}
+          onPress={checkCookies}
+          disabled={!currentUrl}
+        >
+          <Text style={styles.btnText}>6. Cookie</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.buttons}>
+        <TouchableOpacity
+          style={[styles.btn, styles.btnRed, !lastResult?.pid && styles.btnDisabled]}
+          onPress={fetchCommentApi}
+          disabled={!lastResult?.pid}
+        >
+          <Text style={styles.btnText}>7. API</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, styles.btnRed, !lastResult?.pid && styles.btnDisabled]}
+          onPress={fetchBatchApi}
+          disabled={!lastResult?.pid}
+        >
+          <Text style={styles.btnText}>8. Batch</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, showWebView ? styles.btnActive : styles.btnPurple]}
+          onPress={toggleWebView}
+        >
+          <Text style={styles.btnText}>{showWebView ? 'WV: ON' : 'WV: OFF'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, styles.btnPurple, !lastResult?.nextCursor && styles.btnDisabled]}
+          onPress={loadCfChallenge}
+          disabled={!lastResult?.nextCursor}
+        >
+          <Text style={styles.btnText}>CF Chal</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.buttons}>
+        <TouchableOpacity
+          style={[styles.btn, styles.btnNew, !lastResult?.nextCursor && styles.btnDisabled]}
+          onPress={fetchNxcBypass}
+          disabled={!lastResult?.nextCursor}
+        >
+          <Text style={styles.btnText}>9. Bypass</Text>
         </TouchableOpacity>
       </View>
 
       {loading && <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 4 }} />}
 
-      {/* 隠し WebView */}
+      {/* WebView（可視/非表示切替） */}
       {currentUrl ? (
         <WebView
           key={webviewKey}
           ref={webviewRef}
           source={{ uri: currentUrl }}
-          userAgent={DESKTOP_UA}
-          style={styles.webview}
+          userAgent={IOS_SAFARI_UA}
+          style={showWebView ? styles.webviewVisible : styles.webview}
           injectedJavaScript={INJECT_JS}
           onMessage={onMessage}
           onLoadEnd={onLoadEnd}
@@ -298,6 +891,7 @@ export default function WebViewTest() {
           javaScriptEnabled
           domStorageEnabled
           sharedCookiesEnabled
+          thirdPartyCookiesEnabled
         />
       ) : null}
 
@@ -315,11 +909,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   title: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginTop: 8 },
   subtitle: { fontSize: 13, color: '#666', textAlign: 'center', marginBottom: 8 },
-  buttons: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingHorizontal: 12 },
-  btn: { backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
+  buttons: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingHorizontal: 8, marginBottom: 4 },
+  btn: { backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10 },
+  btnNew: { backgroundColor: '#FF6B00' },
+  btnGreen: { backgroundColor: '#34A853' },
+  btnPurple: { backgroundColor: '#7B2FBE' },
+  btnRed: { backgroundColor: '#D32F2F' },
+  btnActive: { backgroundColor: '#E91E63' },
   btnDisabled: { opacity: 0.4 },
   btnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   webview: { height: 0, width: 0, opacity: 0 },
+  webviewVisible: { height: 250, marginHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: '#7B2FBE' },
   logArea: { flex: 1, backgroundColor: '#1a1a2e', margin: 8, borderRadius: 8, padding: 8 },
   logText: { color: '#0f0', fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 16 },
 })
