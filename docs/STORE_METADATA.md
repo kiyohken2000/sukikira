@@ -56,7 +56,8 @@ for 好き嫌い.com
 
 【プライバシーについて】
 収集したデータはすべて端末内にのみ保存され、外部サーバーへは送信されません。
-広告 SDK・アナリティクス・クラッシュレポートツールは一切使用していません。
+サブスクリプション管理のために RevenueCat を使用しており、匿名の識別子が RevenueCat に送信されます。
+広告 SDK・クラッシュレポートツールは使用していません。
 
 【免責事項】
 本アプリは好き嫌い.com（suki-kira.com）の非公式アプリです。好き嫌い.com および運営者とは一切無関係です。
@@ -126,7 +127,8 @@ All of the above are implemented natively and do not exist on the website.
 
 - All user data (bookmarks, history, NG words, vote records) is stored locally on the device using AsyncStorage.
 - No data is sent to any server operated by us. There is no backend.
-- No analytics, advertising SDKs, or crash reporting tools are used.
+- RevenueCat SDK is used for subscription management. Only an anonymous identifier is sent to RevenueCat; no personal information is transmitted.
+- No advertising SDKs or crash reporting tools are used.
 - When a user votes or posts a comment, the request goes directly to suki-kira.com — the same as using the website in a browser.
 - Privacy policy: https://sukikira.pages.dev/privacy.html
 
@@ -198,7 +200,8 @@ Not required. All features are accessible without registration.
 
 【プライバシーについて】
 収集したデータはすべて端末内にのみ保存され、外部サーバーへは送信されません。
-広告 SDK・アナリティクス・クラッシュレポートツールは一切使用していません。
+サブスクリプション管理のために RevenueCat を使用しており、匿名の識別子が RevenueCat に送信されます。
+広告 SDK・クラッシュレポートツールは使用していません。
 
 【免責事項】
 本アプリは好き嫌い.com（suki-kira.com）の非公式アプリです。好き嫌い.com および運営者とは一切無関係です。
