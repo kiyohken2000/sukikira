@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import * as Haptics from 'expo-haptics'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import { getRanking, vote } from '../../utils/sukikira'
 import { useSettings } from '../../contexts/SettingsContext'
 
@@ -24,6 +24,7 @@ const CARD_WIDTH = SCREEN_WIDTH - 48
 
 export default function SwipeVote() {
   const navigation = useNavigation()
+  const colors = useColors()
   const { voted, recordVote } = useSettings()
 
   // ローカルキュー — voted の変化に影響されない
@@ -33,6 +34,8 @@ export default function SwipeVote() {
 
   const currentItem = queue[0]
   const nextItem = queue[1]
+
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   // アニメーション値
   const position = useRef(new Animated.ValueXY()).current
@@ -210,7 +213,7 @@ export default function SwipeVote() {
           {/* 次のカード（背面） */}
           {nextItem && (
             <Animated.View style={[styles.card, { transform: [{ scale: nextCardScale }] }]}>
-              <CardContent item={nextItem} />
+              <CardContent item={nextItem} colors={colors} styles={styles} />
             </Animated.View>
           )}
 
@@ -225,7 +228,7 @@ export default function SwipeVote() {
               <Animated.View style={[styles.overlay, styles.dislikeOverlay, { opacity: dislikeOpacity }]}>
                 <Text style={styles.overlayDislikeText}>嫌い！</Text>
               </Animated.View>
-              <CardContent item={currentItem} />
+              <CardContent item={currentItem} colors={colors} styles={styles} />
             </Animated.View>
           )}
         </View>
@@ -268,7 +271,7 @@ export default function SwipeVote() {
   )
 }
 
-function CardContent({ item }) {
+function CardContent({ item, colors, styles }) {
   return (
     <View style={styles.cardInner}>
       {item.imageUrl ? (
@@ -283,7 +286,7 @@ function CardContent({ item }) {
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,

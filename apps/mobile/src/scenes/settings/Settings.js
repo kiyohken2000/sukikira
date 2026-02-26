@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import {
   View,
   Text,
@@ -9,10 +9,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Switch,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../theme'
+import { useColors, useTheme } from '../../contexts/ThemeContext'
 import { useSettings } from '../../contexts/SettingsContext'
 import { version } from '../../config'
 import * as Linking from 'expo-linking'
@@ -20,10 +21,13 @@ import { useNavigation } from '@react-navigation/native'
 
 export default function Settings() {
   const navigation = useNavigation()
+  const colors = useColors()
+  const { isDark, setIsDark } = useTheme()
   const { ngWords, addNgWord, removeNgWord } = useSettings()
   const [input, setInput] = useState('')
   const tapCountRef = useRef(0)
   const tapTimerRef = useRef(null)
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const handleAdd = () => {
     const word = input.trim()
@@ -43,6 +47,20 @@ export default function Settings() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={80}
       >
+        {/* 外観セクション */}
+        <Text style={styles.sectionTitle}>外観</Text>
+        <View style={styles.toggleRow}>
+          <Text style={styles.toggleLabel}>ダークモード</Text>
+          <Switch
+            value={isDark}
+            onValueChange={setIsDark}
+            trackColor={{ false: '#ccc', true: colors.primary }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        <View style={styles.sectionDivider} />
+
         <Text style={styles.sectionTitle}>NGワード</Text>
         <Text style={styles.sectionDesc}>
           このワードを含むコメントは非表示になります
@@ -131,7 +149,7 @@ export default function Settings() {
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,
@@ -161,6 +179,21 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 12,
     marginBottom: 16,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  toggleLabel: {
+    color: colors.text,
+    fontSize: 15,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 16,
   },
   inputRow: {
     flexDirection: 'row',

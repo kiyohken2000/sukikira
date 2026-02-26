@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import { postComment } from '../../utils/sukikira'
 import { useSettings } from '../../contexts/SettingsContext'
 import * as Linking from 'expo-linking'
@@ -25,6 +25,7 @@ const MAX_LENGTH = 200
 export default function Post() {
   const navigation = useNavigation()
   const route = useRoute()
+  const colors = useColors()
   const { name, replyTo } = route.params
   const { cacheResult, voted, recordComment, eulaAccepted, acceptEula } = useSettings()
 
@@ -34,6 +35,7 @@ export default function Post() {
 
   const [body, setBody] = useState(replyTo ? `>>${replyTo}\n` : '')
   const [loading, setLoading] = useState(false)
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const doSubmit = async () => {
     if (!body.trim()) return
@@ -145,7 +147,7 @@ export default function Post() {
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,

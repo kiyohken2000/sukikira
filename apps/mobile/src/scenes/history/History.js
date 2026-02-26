@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react'
+import React, { useRef, useState, useCallback, useMemo } from 'react'
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import { useSettings } from '../../contexts/SettingsContext'
 import RevoteTab from './RevoteTab'
 
@@ -29,7 +29,7 @@ function formatTime(isoStr) {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
-function Thumb({ uri }) {
+function Thumb({ uri, colors, styles }) {
   if (!uri) {
     return (
       <View style={[styles.thumb, styles.thumbPlaceholder]}>
@@ -40,11 +40,11 @@ function Thumb({ uri }) {
   return <Image source={{ uri }} style={styles.thumb} />
 }
 
-function VoteRow({ item, onPress, lastViewedText, revoteReady }) {
+function VoteRow({ item, onPress, lastViewedText, revoteReady, colors, styles }) {
   const isLike = item.voteType === 'like'
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
-      <Thumb uri={item.imageUrl} />
+      <Thumb uri={item.imageUrl} colors={colors} styles={styles} />
       <View style={styles.rowBody}>
         <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
         <View style={styles.rowMeta}>
@@ -66,10 +66,10 @@ function VoteRow({ item, onPress, lastViewedText, revoteReady }) {
   )
 }
 
-function BrowseRow({ item, onPress, lastViewedText }) {
+function BrowseRow({ item, onPress, lastViewedText, colors, styles }) {
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
-      <Thumb uri={item.imageUrl} />
+      <Thumb uri={item.imageUrl} colors={colors} styles={styles} />
       <View style={styles.rowBody}>
         <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
         {lastViewedText && (
@@ -81,7 +81,7 @@ function BrowseRow({ item, onPress, lastViewedText }) {
   )
 }
 
-function CommentRow({ item, onPress, lastViewedText }) {
+function CommentRow({ item, onPress, lastViewedText, colors, styles }) {
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
       <View style={[styles.thumb, styles.thumbComment]}>
@@ -106,11 +106,13 @@ const SUB_TABS = [
 
 export default function History() {
   const navigation = useNavigation()
+  const colors = useColors()
   const { voteHistory, browseHistory, commentHistory, getLastViewed, getVotedAt } = useSettings()
   const sectionListRef = useRef(null)
   useScrollToTop(sectionListRef)
   const [activeTab, setActiveTab] = useState('history')
   const [, setTick] = useState(0)
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   useFocusEffect(
     useCallback(() => {
@@ -161,6 +163,8 @@ export default function History() {
           item={item}
           lastViewedText={lvText}
           revoteReady={revoteReady}
+          colors={colors}
+          styles={styles}
           onPress={() => goToDetails(item.name, item.imageUrl)}
         />
       )
@@ -170,6 +174,8 @@ export default function History() {
         <BrowseRow
           item={item}
           lastViewedText={lvText}
+          colors={colors}
+          styles={styles}
           onPress={() => goToDetails(item.name, item.imageUrl)}
         />
       )
@@ -178,6 +184,8 @@ export default function History() {
       <CommentRow
         item={item}
         lastViewedText={lvText}
+        colors={colors}
+        styles={styles}
         onPress={() => goToDetails(item.name, item.imageUrl)}
       />
     )
@@ -228,7 +236,7 @@ export default function History() {
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,

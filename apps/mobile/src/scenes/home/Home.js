@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import { getRanking } from '../../utils/sukikira'
 import PersonCard from '../../components/PersonCard/PersonCard'
 import { useSettings } from '../../contexts/SettingsContext'
@@ -50,6 +50,7 @@ const TABS = [
 
 export default function Home() {
   const navigation = useNavigation()
+  const colors = useColors()
   const { voted, commentHistory, getVotedAt, getLastViewed } = useSettings()
   const commentedNames = useMemo(
     () => new Set(commentHistory.map(h => h.name)),
@@ -67,6 +68,8 @@ export default function Home() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [, setTick] = useState(0) // フォーカス時に残り時間等を再計算するためのダミー state
   const [error, setError] = useState(null)
+
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const load = useCallback(async (type) => {
     setLoading(true)
@@ -194,7 +197,7 @@ export default function Home() {
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
 } from 'react-native'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import { useSettings } from '../../contexts/SettingsContext'
 
 const THUMB_SIZE = 48
@@ -35,7 +35,7 @@ function formatTime(timestamp) {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
-function Thumb({ uri }) {
+function Thumb({ uri, colors, styles }) {
   if (!uri) {
     return (
       <View style={[styles.thumb, styles.thumbPlaceholder]}>
@@ -48,8 +48,10 @@ function Thumb({ uri }) {
 
 export default function RevoteTab() {
   const navigation = useNavigation()
+  const colors = useColors()
   const { getAllVotedRaw, getAllNotifyVote, getLastViewed, voteHistory } = useSettings()
   const [, setTick] = useState(0)
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   useFocusEffect(
     useCallback(() => {
@@ -141,7 +143,7 @@ export default function RevoteTab() {
         onPress={() => goToDetails(item.name, item.imageUrl)}
         activeOpacity={0.7}
       >
-        <Thumb uri={item.imageUrl} />
+        <Thumb uri={item.imageUrl} colors={colors} styles={styles} />
         <View style={styles.rowBody}>
           <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
           <View style={styles.rowMeta}>
@@ -192,7 +194,7 @@ export default function RevoteTab() {
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   listContent: {
     paddingBottom: 24,
   },

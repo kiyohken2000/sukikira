@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import { search } from '../../utils/sukikira'
 import PersonCard from '../../components/PersonCard/PersonCard'
 import { useSettings } from '../../contexts/SettingsContext'
@@ -45,6 +45,7 @@ function getLastViewedText(getLastViewed, name) {
 
 export default function Search() {
   const navigation = useNavigation()
+  const colors = useColors()
   const { voted, commentHistory, getVotedAt, getLastViewed } = useSettings()
   const commentedNames = useMemo(
     () => new Set(commentHistory.map(h => h.name)),
@@ -59,6 +60,8 @@ export default function Search() {
   const [error, setError] = useState(null)
   const [searched, setSearched] = useState(false)
   const [, setTick] = useState(0)
+
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   useFocusEffect(
     useCallback(() => {
@@ -156,7 +159,7 @@ export default function Search() {
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,

@@ -1,7 +1,7 @@
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../../theme'
+import { useColors } from '../../../contexts/ThemeContext'
 import { RankingStacks } from '../stacks/RankingStacks'
 import { SearchStacks } from '../stacks/SearchStacks'
 import { HistoryStacks } from '../stacks/HistoryStacks'
@@ -11,6 +11,7 @@ import { SettingsStacks } from '../stacks/SettingsStacks'
 const Tab = createBottomTabNavigator()
 
 export default function TabNavigator() {
+  const colors = useColors()
   return (
     <Tab.Navigator
       initialRouteName="RankingTab"

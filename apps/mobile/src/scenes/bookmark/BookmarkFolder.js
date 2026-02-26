@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, useFocusEffect, useScrollToTop } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import { useSettings } from '../../contexts/SettingsContext'
 
 const THUMB_SIZE = 52
@@ -48,11 +48,13 @@ function formatRemaining(ms) {
 export default function BookmarkFolder() {
   const navigation = useNavigation()
   const route = useRoute()
+  const colors = useColors()
   const { folderId, folderName } = route.params
   const { bookmarkFolders, removeFromFolder, voted, commentHistory, getVotedAt, getLastViewed } = useSettings()
   const flatListRef = useRef(null)
   useScrollToTop(flatListRef)
   const [, setTick] = useState(0)
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   useFocusEffect(
     useCallback(() => {
@@ -181,7 +183,7 @@ export default function BookmarkFolder() {
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   navHeader: {
     flexDirection: 'row',

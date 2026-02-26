@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import VoteBar from '../VoteBar/VoteBar'
 
 const TWO_HOURS = 2 * 60 * 60 * 1000
@@ -21,6 +21,8 @@ function formatRemaining(ms) {
  * @param {number|undefined} remainingMs — 再投票までの残りms
  */
 export default function PersonCard({ item, onPress, rank, votedType, commented, remainingMs, lastViewedText }) {
+  const colors = useColors()
+  const styles = useMemo(() => createStyles(colors), [colors])
   const remainingText = remainingMs != null ? formatRemaining(remainingMs) : null
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
@@ -69,7 +71,7 @@ export default function PersonCard({ item, onPress, rank, votedType, commented, 
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',

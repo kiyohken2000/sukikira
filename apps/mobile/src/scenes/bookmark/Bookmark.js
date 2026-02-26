@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useMemo } from 'react'
 import {
   View,
   Text,
@@ -13,14 +13,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useScrollToTop } from '@react-navigation/native'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import { useSettings } from '../../contexts/SettingsContext'
 
 export default function Bookmark() {
   const navigation = useNavigation()
+  const colors = useColors()
   const { bookmarkFolders, addBookmarkFolder, removeBookmarkFolder } = useSettings()
   const flatListRef = useRef(null)
   useScrollToTop(flatListRef)
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const totalCount = React.useMemo(() => {
     const seen = new Set()
@@ -155,7 +157,7 @@ export default function Bookmark() {
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',

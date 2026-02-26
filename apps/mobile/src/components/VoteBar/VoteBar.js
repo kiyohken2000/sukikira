@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { View, Text, StyleSheet } from 'react-native'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 
 /**
  * 好き/嫌い割合バー
@@ -9,6 +9,8 @@ import { colors } from '../../theme'
  * @param {boolean} large - 大きく表示するか（人物詳細画面用）
  */
 export default function VoteBar({ likePercent = '0', dislikePercent = '0', large = false }) {
+  const colors = useColors()
+  const styles = useMemo(() => createStyles(colors), [colors])
   const like = parseFloat(likePercent) || 0
   const dislike = parseFloat(dislikePercent) || 0
 
@@ -30,7 +32,7 @@ export default function VoteBar({ likePercent = '0', dislikePercent = '0', large
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   bar: {
     flexDirection: 'row',
     height: 6,

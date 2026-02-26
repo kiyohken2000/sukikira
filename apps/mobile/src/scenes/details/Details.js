@@ -21,7 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native'
 import * as Haptics from 'expo-haptics'
 import FontIcon from 'react-native-vector-icons/FontAwesome'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import { getComments, getMoreComments, vote, voteComment } from '../../utils/sukikira'
 import { useSettings } from '../../contexts/SettingsContext'
 import CommentItem from '../../components/CommentItem/CommentItem'
@@ -32,6 +32,7 @@ const IMG_SIZE = 100
 const VOTE_EXPIRE_MS = 24 * 60 * 60 * 1000 // 24時間
 
 function CountdownText({ name }) {
+  const colors = useColors()
   const { getVotedAt, isNotifyEnabled, setNotifyEnabled, getNotifyId, setNotifyId } = useSettings()
   const [remaining, setRemaining] = useState(() => {
     const votedAt = getVotedAt(name)
@@ -39,6 +40,7 @@ function CountdownText({ name }) {
     return Math.max(0, votedAt + VOTE_EXPIRE_MS - Date.now())
   })
   const [notifyOn, setNotifyOn] = useState(() => isNotifyEnabled(name))
+  const styles = useMemo(() => createCountdownStyles(colors), [colors])
 
   useFocusEffect(
     useCallback(() => {
@@ -76,7 +78,7 @@ function CountdownText({ name }) {
 
   if (remaining < 0) return null
   if (remaining === 0) {
-    return <Text style={countdownStyles.ready}>再投票できます</Text>
+    return <Text style={styles.ready}>再投票できます</Text>
   }
 
   const totalMin = Math.ceil(remaining / 60000)
@@ -85,8 +87,8 @@ function CountdownText({ name }) {
   const text = h > 0 ? `あと${h}時間${m}分` : `あと${m}分`
 
   return (
-    <View style={countdownStyles.row}>
-      <Text style={countdownStyles.text}>{text}で再投票できます</Text>
+    <View style={styles.row}>
+      <Text style={styles.text}>{text}で再投票できます</Text>
       <TouchableOpacity onPress={toggleNotify} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <FontIcon
           name={notifyOn ? 'bell' : 'bell-slash-o'}
@@ -98,7 +100,7 @@ function CountdownText({ name }) {
   )
 }
 
-const countdownStyles = StyleSheet.create({
+const createCountdownStyles = (colors) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -128,6 +130,7 @@ const FILTER_TABS = [
 export default function Details() {
   const navigation = useNavigation()
   const route = useRoute()
+  const colors = useColors()
   const { name, imageUrl: paramImageUrl } = route.params
 
   const {
@@ -207,6 +210,8 @@ export default function Details() {
   const myCommentIds = useMemo(() => {
     return new Set(myCommentEntries.map(h => h.commentId))
   }, [myCommentEntries])
+
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -756,7 +761,7 @@ export default function Details() {
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,

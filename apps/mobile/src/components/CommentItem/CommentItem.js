@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native'
 import * as Haptics from 'expo-haptics'
-import { colors } from '../../theme'
+import { useColors } from '../../contexts/ThemeContext'
 import { useSettings } from '../../contexts/SettingsContext'
 
 // URL 検出正規表現
@@ -76,6 +76,7 @@ export default function CommentItem({
   upvoteChange = 0,
   isNew = false,
 }) {
+  const colors = useColors()
   const { addNgWord } = useSettings()
   const [voted, setVoted] = useState(votedType)
   const [likes, setLikes] = useState(comment.upvoteCount ?? 0)
@@ -84,6 +85,8 @@ export default function CommentItem({
   // NGワード入力モーダル
   const [ngModalVisible, setNgModalVisible] = useState(false)
   const [ngInput, setNgInput] = useState('')
+
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const borderColor =
     comment.type === 'like'
@@ -298,7 +301,7 @@ export default function CommentItem({
   )
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     backgroundColor: colors.card,
     borderLeftWidth: 3,
