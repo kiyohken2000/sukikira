@@ -153,6 +153,7 @@ export default function Details() {
   const [voting, setVoting] = useState(false)
   const [filter, setFilter] = useState('all')
   const [error, setError] = useState(null)
+  const [stale, setStale] = useState(false)
   const [nextCursor, setNextCursor] = useState(null)
   const [loadingMore, setLoadingMore] = useState(false)
 
@@ -221,6 +222,7 @@ export default function Details() {
       if (notFound) {
         setError('この人物のページはsuki-kira.comに存在しません')
       } else if (info !== null) {
+        setStale(false)
         // 前回の maxCommentId を保存（初回のみ）
         if (prevMaxCommentIdRef.current === undefined) {
           const last = getLastViewed(name)
@@ -238,19 +240,27 @@ export default function Details() {
           recordLastViewed(name, maxId)
         }
       } else {
-        const cached = getCachedResult(name)
-        if (cached) {
-          if (prevMaxCommentIdRef.current === undefined) {
-            const last = getLastViewed(name)
-            prevMaxCommentIdRef.current = last?.maxCommentId ?? null
+        // resultInfo が null = vote ページ or 空ボディ
+        if (!resultInfo) {
+          // 初回ロード: キャッシュにフォールバック
+          const cached = getCachedResult(name)
+          if (cached) {
+            if (prevMaxCommentIdRef.current === undefined) {
+              const last = getLastViewed(name)
+              prevMaxCommentIdRef.current = last?.maxCommentId ?? null
+            }
+            setResultInfo(cached.resultInfo)
+            setComments(cached.comments)
+            allCommentsRef.current = cached.comments
+            setNextCursor(null)
+            setStale(true)
+            recordBrowse(name, cached.resultInfo?.imageUrl || paramImageUrl)
+          } else {
+            recordBrowse(name, paramImageUrl)
           }
-          setResultInfo(cached.resultInfo)
-          setComments(cached.comments)
-          allCommentsRef.current = cached.comments
-          setNextCursor(null)
-          recordBrowse(name, cached.resultInfo?.imageUrl || paramImageUrl)
         } else {
-          recordBrowse(name, paramImageUrl)
+          // リフレッシュ時: 現在の表示を維持、stale 表示
+          setStale(true)
         }
       }
     } catch (e) {
@@ -275,6 +285,7 @@ export default function Details() {
       setComments(cmts)
       allCommentsRef.current = cmts
       setNextCursor(cursor ?? null)
+      setStale(false)
       recordVote(name, type, info.imageUrl || paramImageUrl)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       cacheResult(name, info, cmts)
@@ -514,6 +525,12 @@ export default function Details() {
       )}
       {searchOpen && searchQuery.length > 0 && (
         <Text style={styles.searchCount}>{filteredComments.length} 件ヒット</Text>
+      )}
+
+      {stale && comments.length > 0 && (
+        <View style={styles.staleBanner}>
+          <Text style={styles.staleText}>投票するとコメントが最新に更新されます</Text>
+        </View>
       )}
 
       {loading && comments.length === 0 ? (
@@ -934,6 +951,23 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  staleBanner: {
+    backgroundColor: 'rgba(249, 115, 22, 0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(249, 115, 22, 0.25)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  staleText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   center: {
     flex: 1,

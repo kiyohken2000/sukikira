@@ -190,7 +190,7 @@ const parseResult = (html) => {
  */
 export const getComments = async (name) => {
   const encodedName = encodeName(name)
-  const html = await get(`/people/result/${encodedName}`)
+  const html = await get(`/people/result/${encodedName}?_t=${Date.now()}`)
 
   // 存在しない人物: トップページにリダイレクトされた場合
   if (html && !html.includes('/people/') && !html.includes('好き派')) {
