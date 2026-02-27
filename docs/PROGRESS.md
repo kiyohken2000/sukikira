@@ -273,3 +273,6 @@
 | 2026/02/26 | URL エンコード WAF バイパス: 8パターンテスト。WAF 回避できてもサーバーが認識しない → 棄却 |
 | 2026/02/26 | ?nxc= による upvote/downvote 取得は全アプローチ検証済みで技術的に不可能と確定 |
 | 2026/02/26 | バグ修正3件: 再投票可能なのにボタン押せない / 投票後コメント追加読み込み不可 / 一覧の残り時間がフォーカス時に更新されない |
+| 2026/02/27 | Cloudflare WAF 緩和確認: WebView 内で `?nxc=` ページネーションが動作可能に |
+| 2026/02/27 | WebView プロキシ実装: `WebViewCommentProxy.js` で2ページ目以降も upvote/downvote/token 取得可能。個別コメントAPI フォールバック付き |
+| 2026/02/28 | WebView プロキシ断念: iOS の非表示 WebView でプログラム的遷移後に JS 実行不可（`source` prop 変更・`injectJavaScript`・`injectedJavaScript` 全滅）。個別コメントAPI方式に戻す |

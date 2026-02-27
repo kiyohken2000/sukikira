@@ -175,6 +175,7 @@ export default function WebViewTest() {
   const [webviewKey, setWebviewKey] = useState(0) // key を変えて WebView を強制再マウント
   const [lastResult, setLastResult] = useState(null)
   const [showWebView, setShowWebView] = useState(false) // 可視 WebView モード
+  const [browseMode, setBrowseMode] = useState(false) // 手動ブラウジングモード
 
   const log = useCallback((msg) => {
     const ts = new Date().toLocaleTimeString('ja-JP')
@@ -198,6 +199,111 @@ export default function WebViewTest() {
   }
 
   const loadResultPage = () => navigate(RESULT_URL, true)
+
+  // ブラウズモード: JS注入なし、フルサイズ WebView で手動操作
+  const startBrowse = () => {
+    setBrowseMode(true)
+    setShowWebView(true)
+    log('=== ブラウズモード開始 ===')
+    log('手動で「次へ」リンクをタップしてください')
+    setCurrentUrl(RESULT_URL)
+    setWebviewKey(k => k + 1)
+  }
+
+  // ブラウズモード用: プログラム的にページネーションリンクをクリック/遷移テスト
+  const browseAutoNav = () => {
+    if (!browseMode) { log('ERROR: ブラウズモードで使用してください'); return }
+    log('=== プログラム的ナビゲーションテスト ===')
+    const js = `
+    (function() {
+      try {
+        // ページネーションリンクを探す
+        var allNxcLinks = document.querySelectorAll('a[href*="nxc="]');
+        var relNextLinks = document.querySelectorAll('a[rel="next"]');
+        var pageLinks = document.querySelectorAll('.page-link[href*="nxc="]');
+
+        var info = {
+          nxcLinkCount: allNxcLinks.length,
+          relNextCount: relNextLinks.length,
+          pageLinkCount: pageLinks.length,
+          links: []
+        };
+
+        allNxcLinks.forEach(function(el) {
+          info.links.push({
+            href: el.getAttribute('href'),
+            text: el.textContent.trim().substring(0, 30),
+            rel: el.getAttribute('rel'),
+            className: el.className
+          });
+        });
+
+        // テスト対象のリンクを決定
+        var target = allNxcLinks.length > 0 ? allNxcLinks[0] : relNextLinks.length > 0 ? relNextLinks[0] : null;
+
+        if (!target) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            phase: 'auto_nav',
+            step: 'no_link',
+            info: info
+          }));
+          return;
+        }
+
+        var targetHref = target.getAttribute('href');
+        info.targetHref = targetHref;
+
+        // テスト1: .click()
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'auto_nav',
+          step: 'clicking',
+          method: 'click()',
+          info: info
+        }));
+        target.click();
+      } catch(e) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'auto_nav', step: 'error', error: e.message
+        }));
+      }
+    })();
+    true;`
+    webviewRef.current?.injectJavaScript(js)
+  }
+
+  // ブラウズモード用: window.location.href で遷移テスト
+  const browseLocationNav = () => {
+    if (!browseMode) { log('ERROR: ブラウズモードで使用してください'); return }
+    log('=== location.href ナビゲーションテスト ===')
+    const js = `
+    (function() {
+      try {
+        var allNxcLinks = document.querySelectorAll('a[href*="nxc="]');
+        if (allNxcLinks.length === 0) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            phase: 'auto_nav', step: 'no_link', method: 'location.href'
+          }));
+          return;
+        }
+        var href = allNxcLinks[0].getAttribute('href');
+        // 相対URLを絶対URLに変換
+        var fullUrl = new URL(href, location.origin).href;
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'auto_nav',
+          step: 'navigating',
+          method: 'location.href',
+          url: fullUrl
+        }));
+        window.location.href = fullUrl;
+      } catch(e) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          phase: 'auto_nav', step: 'error', error: e.message
+        }));
+      }
+    })();
+    true;`
+    webviewRef.current?.injectJavaScript(js)
+  }
 
   const loadNextPage = () => {
     if (!lastResult?.nextCursor) { log('ERROR: nextCursor がない'); return }
@@ -618,6 +724,42 @@ export default function WebViewTest() {
       const data = JSON.parse(event.nativeEvent.data)
       console.log('[WVTest] RAW:', JSON.stringify(data, null, 2))
 
+      if (data.phase === 'auto_nav') {
+        console.log('[WVTest] auto_nav:', JSON.stringify(data))
+        if (data.step === 'no_link') {
+          log(`リンクなし: nxc= リンクが見つからない (method=${data.method || 'click'})`)
+        } else if (data.step === 'clicking') {
+          log(`[${data.method}] nxc links: ${data.info?.nxcLinkCount}`)
+          data.info?.links?.forEach(l => log(`  href=${l.href} text="${l.text}" class=${l.className}`))
+          log(`クリック対象: ${data.info?.targetHref}`)
+          log(`→ ナビゲーション待ち...`)
+        } else if (data.step === 'navigating') {
+          log(`[${data.method}] → ${data.url}`)
+          log(`→ ナビゲーション待ち...`)
+        } else if (data.step === 'error') {
+          log(`ERROR: ${data.error}`)
+        }
+        return
+      }
+
+      if (data.phase === 'browse_info') {
+        console.log('[WVTest] browse_info:', JSON.stringify(data))
+        log(`=== ページ情報 ===`)
+        log(`URL: ${data.url}`)
+        log(`title: ${data.title}`)
+        log(`nxc=あり: ${data.hasNxc}, ?cm: ${data.hasCm}`)
+        log(`コメント数: ${data.commentCount}`)
+        log(`ID範囲: ${data.idRange}`)
+        log(`次へリンク: ${data.nextHref || 'なし'}`)
+        if (data.hasNxc && data.commentCount > 0) {
+          log(`★★★ ?nxc= ページネーション成功！ ★★★`)
+        }
+        if (data.hasCm && !data.hasNxc) {
+          log(`→ ?cm にリダイレクトされた（WAF ブロック）`)
+        }
+        return
+      }
+
       if (data.phase === 'vote') {
         log(`vote ページ検出 → 自動投票送信中...`)
         log(`URL: ${data.url}`)
@@ -775,14 +917,51 @@ export default function WebViewTest() {
 
   const onLoadEnd = useCallback(() => {
     setLoading(false)
+    if (browseMode) {
+      log('WebView loaded (ブラウズモード - JS注入スキップ)')
+      // ブラウズモードでも現在のURLとページ情報だけ取得
+      webviewRef.current?.injectJavaScript(`
+        (function() {
+          var url = location.href;
+          var hasNxc = url.indexOf('nxc=') !== -1;
+          var hasCm = url.indexOf('?cm') !== -1;
+          var commentCount = document.querySelectorAll('div[class*="comment-container"]').length;
+          var ids = [];
+          document.querySelectorAll('div[class*="comment-container"]').forEach(function(el) {
+            var m = el.className.match(/comment-container c(\\d+)/);
+            if (m) ids.push(m[1]);
+          });
+          var nextLink = document.querySelector('a[rel="next"]');
+          var nextHref = nextLink ? nextLink.getAttribute('href') : null;
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            phase: 'browse_info',
+            url: url,
+            hasNxc: hasNxc,
+            hasCm: hasCm,
+            commentCount: commentCount,
+            idRange: ids.length > 0 ? ids[0] + '~' + ids[ids.length-1] : 'none',
+            nextHref: nextHref,
+            title: document.title
+          }));
+        })();
+        true;
+      `)
+      return
+    }
     log('WebView loaded, injecting extract JS...')
     // ページ読み込み完了後に抽出JSを注入（ナビゲーション後にも必要）
     webviewRef.current?.injectJavaScript(INJECT_JS)
-  }, [log])
+  }, [log, browseMode])
 
   const onNavigationStateChange = useCallback((state) => {
-    log(`Nav: ${state.url} (loading=${state.loading})`)
-  }, [log])
+    const url = state.url || ''
+    const hasNxc = url.includes('nxc=')
+    const hasCm = url.includes('?cm')
+    console.log(`[WVTest] Nav: url=${url} loading=${state.loading} canGoBack=${state.canGoBack} title=${state.title}`)
+    if (hasNxc) console.log('[WVTest] ★ nxc= パラメータ検出! リダイレクトされていない')
+    if (hasCm && browseMode) console.log('[WVTest] ✗ ?cm にリダイレクトされた')
+    log(`Nav: ${url} (loading=${state.loading})`)
+  }, [log, browseMode])
 
   const onError = useCallback((syntheticEvent) => {
     const { nativeEvent } = syntheticEvent
@@ -871,6 +1050,29 @@ export default function WebViewTest() {
         >
           <Text style={styles.btnText}>9. Bypass</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, browseMode ? styles.btnActive : { backgroundColor: '#00897B' }]}
+          onPress={() => {
+            if (browseMode) { setBrowseMode(false); setShowWebView(false); log('ブラウズモード終了') }
+            else startBrowse()
+          }}
+        >
+          <Text style={styles.btnText}>{browseMode ? 'Browse: ON' : 'Browse'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, { backgroundColor: '#00897B' }, !browseMode && styles.btnDisabled]}
+          onPress={browseAutoNav}
+          disabled={!browseMode}
+        >
+          <Text style={styles.btnText}>JS click</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, { backgroundColor: '#00897B' }, !browseMode && styles.btnDisabled]}
+          onPress={browseLocationNav}
+          disabled={!browseMode}
+        >
+          <Text style={styles.btnText}>JS href</Text>
+        </TouchableOpacity>
       </View>
 
       {loading && <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 4 }} />}
@@ -882,8 +1084,8 @@ export default function WebViewTest() {
           ref={webviewRef}
           source={{ uri: currentUrl }}
           userAgent={IOS_SAFARI_UA}
-          style={showWebView ? styles.webviewVisible : styles.webview}
-          injectedJavaScript={INJECT_JS}
+          style={browseMode ? styles.webviewBrowse : showWebView ? styles.webviewVisible : styles.webview}
+          {...(!browseMode && { injectedJavaScript: INJECT_JS })}
           onMessage={onMessage}
           onLoadEnd={onLoadEnd}
           onNavigationStateChange={onNavigationStateChange}
@@ -920,6 +1122,7 @@ const styles = StyleSheet.create({
   btnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   webview: { height: 0, width: 0, opacity: 0 },
   webviewVisible: { height: 250, marginHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: '#7B2FBE' },
+  webviewBrowse: { flex: 2, marginHorizontal: 8, borderRadius: 8, borderWidth: 2, borderColor: '#00897B' },
   logArea: { flex: 1, backgroundColor: '#1a1a2e', margin: 8, borderRadius: 8, padding: 8 },
   logText: { color: '#0f0', fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 16 },
 })

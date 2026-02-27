@@ -225,8 +225,6 @@ const parseNextCursor = (html) => {
 
 /**
  * 追加コメントを個別取得（/p/{pid}/c/{cid}/t/{token} API）
- * Cloudflare が ?nxc= ページネーションをリダイレクトするため、
- * 個別コメントAPIで取得する。
  * 注意: APIは upvote/downvote 数と token を返さない。
  * @param {string} name - 人物名
  * @param {string} cursor - 現在の最小コメントID

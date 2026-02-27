@@ -1,6 +1,6 @@
 # セッション引継ぎドキュメント
 
-最終更新: 2026-02-26 (セッション11)
+最終更新: 2026-02-27 (セッション12)
 
 ---
 
@@ -138,10 +138,9 @@ NavigationContainer
 - 例: `/people/result/新垣結衣/?nxc=42261` → 20件取得
 - `parseNextCursor(html)` で `?nxc=(\d+)` を抽出
 - ページ末尾（最古）では `?nxc=` が出現しない → `nextCursor = null`
-- **Cloudflare WAF が `?nxc=` をブロック中**（`?cm` にリダイレクト）。実ブラウザ（cf_clearance あり）のみ通過
+- **Cloudflare WAF**: 2026-02-27 に緩和確認（WebView 内で `?nxc=` 動作可能）。ただし iOS の非表示 WebView でプログラム的遷移後に JS 実行不可のためアプリでは利用不可
 - 2ページ目以降は個別コメント API (`/p/{pid}/c/{cid}/t/{sk_token}`) で1件ずつ取得
 - 個別 API は upvote/downvote/token を含まない → 2ページ目以降はグレーアウト表示
-- Workers プロキシ・WebView プロキシ・URL エンコードバイパス全て検証済み・不可能と確定
 - 詳細: `docs/HANDOFF_PAGINATION.md`
 
 ### コメント good/bad 投票
@@ -305,7 +304,7 @@ const getCommentVoted = useCallback((commentId) => commentVotedRef.current[comme
 - 人物詳細画面（複数画像・タグ・投票バー・コメント一覧）
 - 好き/嫌い投票（IPリダイレクト時のフォールバック、存在しない人物のエラー表示）
 - コメントフィルタ（すべて/好き派/嫌い派）
-- コメント無限スクロール（`?nxc=` ページネーション）
+- コメント無限スクロール（個別コメントAPI経由、2P以降は upvote/downvote なし）
 - NGワードフィルタ（SettingsContext 経由）
 - コメント good/bad ボタン（投票済み状態がセッション中持続）
 - コメント投稿（投稿後に既存Details画面へ戻る・キャッシュ反映）
