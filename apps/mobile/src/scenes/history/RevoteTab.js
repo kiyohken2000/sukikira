@@ -85,6 +85,25 @@ export default function RevoteTab() {
     }
   }).sort((a, b) => a.remaining - b.remaining)
 
+  // 再投票可能セクション（24時間経過）
+  const readyItems = Object.entries(votedRaw)
+    .filter(([, entry]) => {
+      if (typeof entry === 'string') return false
+      return now - entry.votedAt >= VOTE_EXPIRE_MS
+    })
+    .map(([name, entry]) => {
+      const lv = getLastViewed(name)
+      return {
+        name,
+        imageUrl: imageMap[name] || '',
+        voteType: entry.type,
+        remaining: 0,
+        votedAt: entry.votedAt,
+        lastViewedAt: lv?.viewedAt ?? null,
+      }
+    })
+    .sort((a, b) => b.votedAt - a.votedAt) // 最近投票した順
+
   // 再投票待ちセクション（24時間以内の投票のみ）
   const revoteItems = Object.entries(votedRaw)
     .filter(([, entry]) => {
@@ -111,6 +130,13 @@ export default function RevoteTab() {
       icon: 'bell',
       data: notifyItems,
       emptyText: '通知予定の人物はありません',
+    },
+    {
+      key: 'ready',
+      title: '再投票可能',
+      icon: 'refresh',
+      data: readyItems,
+      emptyText: '再投票可能な人物はいません',
     },
     {
       key: 'revote',
@@ -161,6 +187,11 @@ export default function RevoteTab() {
               <FontIcon name="bell" color={colors.primary} size={10} />
               <Text style={styles.notifyBadgeText}>通知ON</Text>
             </View>
+          )}
+          {section.key === 'ready' && item.votedAt && (
+            <Text style={styles.lastViewedText}>
+              前回投票: {formatTime(item.votedAt)}
+            </Text>
           )}
           {section.key === 'revote' && item.lastViewedAt && (
             <Text style={styles.lastViewedText}>
