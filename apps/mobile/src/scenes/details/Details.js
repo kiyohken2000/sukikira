@@ -141,6 +141,7 @@ export default function Details() {
     commentHistory,
     bookmarkFolders, addBookmarkFolder, addToFolder, removeFromFolder,
     getLastViewed, recordLastViewed,
+    isNotifyEnabled, getNotifyId, setNotifyId,
   } = useSettings()
   // voted memo はタイマーで更新されないため、getVotedAt で24h経過を直接確認
   const votedAt = getVotedAt(name)
