@@ -289,6 +289,13 @@ export default function Details() {
       recordVote(name, type, info.imageUrl || paramImageUrl)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       cacheResult(name, info, cmts)
+      // 通知ベルが ON なら再スケジュール
+      if (isNotifyEnabled(name)) {
+        const oldId = getNotifyId(name)
+        await cancelVoteNotification(oldId)
+        const newId = await scheduleVoteNotification(name, Date.now())
+        setNotifyId(name, newId)
+      }
     } catch (e) {
       console.error('[Details] vote error:', e?.message)
       const msg = e?.message?.includes('存在しません')
