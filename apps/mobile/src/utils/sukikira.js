@@ -389,16 +389,15 @@ export const vote = async (name, voteType) => {
     return { resultInfo: parseResult(html), comments: cmts, nextCursor }
   }
 
-  // POSTレスポンスが空の場合、結果ページを再取得（投票済みなので result ページが返る）
-  const fallbackHtml = await get(`/people/result/${encodedName}`)
-  if (/好き派:/.test(fallbackHtml)) {
-    const cmts = parseComments(fallbackHtml)
-    const nextCursor = cmts.length >= 20 ? parseNextCursor(fallbackHtml) : null
-    return { resultInfo: parseResult(fallbackHtml), comments: cmts, nextCursor }
+  // POSTレスポンスが空の場合、getComments 経由で結果を再取得
+  // （POST直後の単純GETはCloudflareに空ボディを返されることがある）
+  const fallback = await getComments(name)
+  if (fallback.resultInfo) {
+    return fallback
   }
 
-  console.warn('[vote] result not found. POST html:', html?.length, 'fallback html:', fallbackHtml?.length)
-  throw new Error(`投票結果の取得に失敗 (post=${html?.length ?? 0}, fallback=${fallbackHtml?.length ?? 0}bytes)`)
+  console.warn('[vote] result not found. POST html:', html?.length)
+  throw new Error(`投票結果の取得に失敗 (post=${html?.length ?? 0}bytes)`)
 }
 
 // -----------------------------------------------------------------------
