@@ -33,7 +33,9 @@ const BROWSER_UAS = [
   // Chrome - Desktop
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
 ]
-const getBrowserUA = () => BROWSER_UAS[Math.floor(Math.random() * BROWSER_UAS.length)]
+// セッション単位で UA を固定（同一 IP からリクエストごとに UA が変わる不自然さを回避）
+export const SESSION_UA = BROWSER_UAS[Math.floor(Math.random() * BROWSER_UAS.length)]
+const getBrowserUA = () => SESSION_UA
 
 // デフォルト UA をログ出力（次回 Cloudflare ブロック時の切り分け用）
 let _defaultUALogged = false
