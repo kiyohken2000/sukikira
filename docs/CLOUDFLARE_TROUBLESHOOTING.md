@@ -128,6 +128,20 @@ const res = await fetch(url, {
 })
 ```
 
+### UA 未設定のエンドポイント（2026-03-10 時点で正常動作中）
+
+以下のエンドポイントは UA を設定せずに動作しているため、変更していない。
+将来ブロックされた場合は `getBrowserUA()` を追加すること。
+
+| 関数 | エンドポイント | 現在のヘッダー |
+|---|---|---|
+| `search` | `/search/search` (GET) | ヘッダーなし |
+| `getMoreComments` | `/p/{pid}/c/{cid}/t/{sk_token}` (GET) | credentials のみ |
+| `voteComment` | `api.suki-kira.com/comment/vote` (POST) | Content-Type + Origin |
+| `postComment` | `/people/result/{name}` (POST) | Content-Type + Origin + Referer |
+
+**注意:** 動いているものは触らない。ブロックされてから対処する。
+
 ### 二重 fetch 回避: _votePageCache
 
 `getComments` と `vote` が同じ URL を短時間に2回 fetch すると、2回目が空ボディになることがある。`_votePageCache` で1回目の結果をキャッシュして再利用する。
