@@ -18,10 +18,15 @@ const BASE_URL = 'https://suki-kira.com'
 // 同じ URL を短時間に2回 fetch すると空ボディになる問題の回避策
 let _votePageCache = { name: null, html: null }
 
-/** GETリクエスト（ヘッダーなし — Cloudflare 対策） */
+const BROWSER_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1'
+
+/** GETリクエスト */
 const get = async (path) => {
   const url = `${BASE_URL}${path}`
-  const res = await fetch(url, { credentials: 'include' })
+  const res = await fetch(url, {
+    credentials: 'include',
+    headers: { 'User-Agent': BROWSER_UA },
+  })
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${path}`)
   return await res.text()
 }
@@ -376,6 +381,7 @@ export const vote = async (name, voteType) => {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': BROWSER_UA,
     },
     body,
   })
