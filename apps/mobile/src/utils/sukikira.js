@@ -398,7 +398,8 @@ export const vote = async (name, voteType) => {
     return { resultInfo: parseResult(fallbackHtml), comments: cmts, nextCursor }
   }
 
-  return { resultInfo: null, comments: [], nextCursor: null }
+  console.warn('[vote] result not found. POST html:', html?.length, 'fallback html:', fallbackHtml?.length)
+  throw new Error(`投票結果の取得に失敗 (post=${html?.length ?? 0}, fallback=${fallbackHtml?.length ?? 0}bytes)`)
 }
 
 // -----------------------------------------------------------------------

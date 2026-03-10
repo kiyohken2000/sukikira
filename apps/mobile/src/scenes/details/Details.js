@@ -287,7 +287,7 @@ export default function Details() {
       allCommentsRef.current = cmts
       setNextCursor(cursor ?? null)
       setStale(false)
-      recordVote(name, type, info.imageUrl || paramImageUrl)
+      recordVote(name, type, info?.imageUrl || paramImageUrl)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       cacheResult(name, info, cmts)
       // 通知ベルが ON なら再スケジュール（失敗しても投票は成功扱い）
