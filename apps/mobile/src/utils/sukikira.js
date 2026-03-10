@@ -4,8 +4,8 @@
  * 仕様変更時の修正箇所をこのファイルのみに限定するため、
  * 他のファイルから直接 fetch しないこと。
  *
- * 注意: suki-kira.com の Cloudflare 設定により、カスタムヘッダー（User-Agent 等）を
- * 付与した GET リクエストは空ボディを返す。GETリクエストにはヘッダーを付けないこと。
+ * 注意: suki-kira.com の Cloudflare がネイティブ HTTP クライアントのデフォルト UA を
+ * ボット判定するため、全リクエストにブラウザ風 User-Agent を設定している。
  */
 
 const BASE_URL = 'https://suki-kira.com'
@@ -162,7 +162,7 @@ export const search = async (query) => {
   // 2. JSON API から検索結果取得
   // Cloudflare キャッシュバスト: タイムスタンプを付与して空レスポンスのキャッシュを回避
   const apiUrl = `${BASE_URL}/search/search?q=${q}${token ? `&sk_token=${token}` : ''}&_t=${Date.now()}`
-  const apiRes = await fetch(apiUrl)
+  const apiRes = await fetch(apiUrl, { headers: { 'User-Agent': getBrowserUA() } })
   if (!apiRes.ok) throw new Error(`HTTP ${apiRes.status}: /search/search`)
   const apiText = await apiRes.text()
   if (!apiText || apiText === 'Invalid Token') throw new Error('検索サーバーが応答しません。しばらく時間をおいて再度お試しください')
@@ -277,7 +277,7 @@ export const getMoreComments = async (name, cursor, pid, skToken) => {
   let misses = 0
   for (let id = startId; id > 0 && comments.length < 20 && misses < 10; id--) {
     try {
-      const res = await fetch(`${BASE_URL}/p/${pid}/c/${id}/t/${skToken}`, { credentials: 'include' })
+      const res = await fetch(`${BASE_URL}/p/${pid}/c/${id}/t/${skToken}`, { credentials: 'include', headers: { 'User-Agent': getBrowserUA() } })
       const text = await res.text()
       if (!text || text.length < 10) { misses++; continue }
       const data = JSON.parse(text)
@@ -455,6 +455,7 @@ export const voteComment = async (pidHash, commentId, voteType, token, xdate) =>
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': getBrowserUA(),
       Origin: BASE_URL,
     },
     body,
@@ -498,6 +499,7 @@ export const postComment = async (name, commentBody, commentType = '1') => {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': getBrowserUA(),
       Origin: BASE_URL,
       Referer: `${BASE_URL}/people/result/${encodeName(name)}`,
     },
