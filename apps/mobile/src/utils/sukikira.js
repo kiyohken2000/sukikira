@@ -373,10 +373,9 @@ export const vote = async (name, voteType) => {
 
   const res = await fetch(`${BASE_URL}/people/result/${encodedName}`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: BASE_URL,
-      Referer: `${BASE_URL}/people/vote/${encodedName}`,
     },
     body,
   })
