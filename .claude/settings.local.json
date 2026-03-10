@@ -43,7 +43,8 @@
       "Bash(npx wrangler:*)",
       "Bash(git add apps/mobile/src/config.js apps/mobile/src/scenes/details/Details.js apps/mobile/src/utils/sukikira.js && git commit -m \"$\\(cat <<'EOF'\n投票エラー処理の改善: 通知再スケジュールを独立try-catchに分離、エラー詳細表示\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push)",
-      "Bash(git add apps/mobile/src/scenes/details/Details.js apps/mobile/src/utils/sukikira.js && git commit -m \"$\\(cat <<'EOF'\nfix: info null crash on vote + add diagnostic for empty vote result\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push)"
+      "Bash(git add apps/mobile/src/scenes/details/Details.js apps/mobile/src/utils/sukikira.js && git commit -m \"$\\(cat <<'EOF'\nfix: info null crash on vote + add diagnostic for empty vote result\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push)",
+      "Bash(git add apps/mobile/src/utils/sukikira.js && git commit -m \"$\\(cat <<'EOF'\nfix: add credentials to vote POST and remove custom headers to avoid Cloudflare empty body\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push)"
     ]
   }
 }
