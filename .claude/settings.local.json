@@ -51,7 +51,8 @@
       "Bash(git add apps/mobile/src/utils/sukikira.js && git commit -m \"$\\(cat <<'EOF'\nfix: set browser User-Agent on all requests to bypass Cloudflare bot detection\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push)",
       "Bash(git add apps/mobile/src/scenes/details/Details.js apps/mobile/src/utils/sukikira.js && git commit -m \"$\\(cat <<'EOF'\nrevert: remove partial vote handling, restore original vote flow\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push)",
       "Bash(git add docs/CLOUDFLARE_TROUBLESHOOTING.md && git commit -m \"$\\(cat <<'EOF'\ndocs: add 2026-03-10 Cloudflare UA blocking incident and resolution\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }
