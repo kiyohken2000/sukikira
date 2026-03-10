@@ -34,8 +34,16 @@ const BROWSER_UAS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
 ]
 // セッション単位で UA を固定（同一 IP からリクエストごとに UA が変わる不自然さを回避）
-export const SESSION_UA = BROWSER_UAS[Math.floor(Math.random() * BROWSER_UAS.length)]
-const getBrowserUA = () => SESSION_UA
+let _currentUAIndex = Math.floor(Math.random() * BROWSER_UAS.length)
+export let SESSION_UA = BROWSER_UAS[_currentUAIndex]
+export const getBrowserUA = () => SESSION_UA
+/** Cloudflare が現在の UA をブロックした場合、次の UA にローテーション */
+const rotateUA = () => {
+  _currentUAIndex = (_currentUAIndex + 1) % BROWSER_UAS.length
+  SESSION_UA = BROWSER_UAS[_currentUAIndex]
+  console.log('[sukikira] UA rotated to:', SESSION_UA.slice(0, 40))
+  return SESSION_UA
+}
 
 // デフォルト UA をログ出力（次回 Cloudflare ブロック時の切り分け用）
 let _defaultUALogged = false
@@ -52,7 +60,7 @@ const logDefaultUA = async () => {
 }
 logDefaultUA()
 
-/** GETリクエスト */
+/** GETリクエスト（空レスポンス時は UA ローテーション+リトライ） */
 const get = async (path) => {
   const url = `${BASE_URL}${path}`
   const res = await fetch(url, {
@@ -60,7 +68,18 @@ const get = async (path) => {
     headers: { 'User-Agent': getBrowserUA() },
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${path}`)
-  return await res.text()
+  const text = await res.text()
+  if (text && text.length > 0) return text
+  // Cloudflare が空ボディを返した場合、UA をローテーションしてリトライ
+  console.warn(`[sukikira] empty response for ${path}, rotating UA and retrying`)
+  rotateUA()
+  await new Promise(r => setTimeout(r, 500))
+  const retry = await fetch(url, {
+    credentials: 'include',
+    headers: { 'User-Agent': getBrowserUA() },
+  })
+  if (!retry.ok) throw new Error(`HTTP ${retry.status}: ${path} (retry)`)
+  return await retry.text()
 }
 
 /** 人物名を URL パスに使える形式にエンコード */
@@ -382,7 +401,7 @@ export const vote = async (name, voteType) => {
     _votePageCache = { name: null, html: null }
   } else {
     _votePageCache = { name: null, html: null }
-    pageHtml = await get(`/people/vote/${encodedName}`)
+    pageHtml = await get(`/people/vote/${encodedName}?_t=${Date.now()}`)
   }
 
   // 結果ページが返った場合（既投票済み）
@@ -395,7 +414,7 @@ export const vote = async (name, voteType) => {
   const { id, auth1, auth2, authR } = parseVoteTokens(pageHtml)
 
   if (!id || !auth1 || !auth2 || !authR) {
-    throw new Error(`投票トークンの取得に失敗しました (html=${pageHtml?.length ?? 0}bytes)`)
+    throw new Error(`投票トークンの取得に失敗しました (html=${pageHtml?.length ?? 0}bytes, ua=${SESSION_UA.slice(0, 30)})`)
   }
 
   // 投票POST

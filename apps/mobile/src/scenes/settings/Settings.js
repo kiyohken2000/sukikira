@@ -16,7 +16,7 @@ import FontIcon from 'react-native-vector-icons/FontAwesome'
 import { useColors, useTheme } from '../../contexts/ThemeContext'
 import { useSettings } from '../../contexts/SettingsContext'
 import { version } from '../../config'
-import { SESSION_UA } from '../../utils/sukikira'
+import { getBrowserUA } from '../../utils/sukikira'
 import * as Linking from 'expo-linking'
 import { useNavigation } from '@react-navigation/native'
 
@@ -141,7 +141,7 @@ export default function Settings() {
               >バージョン {version}</Text>
               {defaultUA ? <Text style={[styles.aboutSubtitle, { fontSize: 10, marginTop: 2, textAlign: 'center' }]}>Default:{'\n'}{defaultUA}</Text> : null}
               {/*
-              <Text style={[styles.aboutSubtitle, { fontSize: 10, marginTop: 2, textAlign: 'center' }]}>Session:{'\n'}{SESSION_UA}</Text>
+              <Text style={[styles.aboutSubtitle, { fontSize: 10, marginTop: 2, textAlign: 'center' }]}>Session:{'\n'}{getBrowserUA()}</Text>
               */}
               <View style={styles.aboutLinks}>
                 <TouchableOpacity onPress={() => Linking.openURL('https://sukikira.pages.dev/terms.html')}>
