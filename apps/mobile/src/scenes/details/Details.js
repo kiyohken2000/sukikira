@@ -290,18 +290,25 @@ export default function Details() {
       recordVote(name, type, info.imageUrl || paramImageUrl)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       cacheResult(name, info, cmts)
-      // 通知ベルが ON なら再スケジュール
-      if (isNotifyEnabled(name)) {
-        const oldId = getNotifyId(name)
-        await cancelVoteNotification(oldId)
-        const newId = await scheduleVoteNotification(name, Date.now())
-        setNotifyId(name, newId)
+      // 通知ベルが ON なら再スケジュール（失敗しても投票は成功扱い）
+      try {
+        if (isNotifyEnabled(name)) {
+          const oldId = getNotifyId(name)
+          await cancelVoteNotification(oldId)
+          const newId = await scheduleVoteNotification(name, Date.now())
+          setNotifyId(name, newId)
+        }
+      } catch (ne) {
+        console.warn('[Details] notification reschedule error:', ne?.message)
       }
     } catch (e) {
       console.error('[Details] vote error:', e?.message)
-      const msg = e?.message?.includes('存在しません')
-        ? 'この人物の投票ページはsuki-kira.comに存在しません'
-        : '投票に失敗しました'
+      let msg = '投票に失敗しました'
+      if (e?.message?.includes('存在しません')) {
+        msg = 'この人物の投票ページはsuki-kira.comに存在しません'
+      } else if (e?.message) {
+        msg = `投票に失敗しました: ${e.message}`
+      }
       Alert.alert('エラー', msg)
     } finally {
       setVoting(false)

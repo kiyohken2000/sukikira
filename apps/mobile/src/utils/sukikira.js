@@ -358,7 +358,7 @@ export const vote = async (name, voteType) => {
   const { id, auth1, auth2, authR } = parseVoteTokens(pageHtml)
 
   if (!id || !auth1 || !auth2 || !authR) {
-    throw new Error('投票トークンの取得に失敗しました')
+    throw new Error(`投票トークンの取得に失敗しました (html=${pageHtml?.length ?? 0}bytes)`)
   }
 
   // 投票POST
