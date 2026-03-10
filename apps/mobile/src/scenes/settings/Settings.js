@@ -140,7 +140,9 @@ export default function Settings() {
                 }}
               >バージョン {version}</Text>
               {defaultUA ? <Text style={[styles.aboutSubtitle, { fontSize: 10, marginTop: 2, textAlign: 'center' }]}>Default:{'\n'}{defaultUA}</Text> : null}
+              {/*
               <Text style={[styles.aboutSubtitle, { fontSize: 10, marginTop: 2, textAlign: 'center' }]}>Session:{'\n'}{SESSION_UA}</Text>
+              */}
               <View style={styles.aboutLinks}>
                 <TouchableOpacity onPress={() => Linking.openURL('https://sukikira.pages.dev/terms.html')}>
                   <Text style={styles.aboutLink}>利用規約</Text>
