@@ -18,14 +18,29 @@ const BASE_URL = 'https://suki-kira.com'
 // 同じ URL を短時間に2回 fetch すると空ボディになる問題の回避策
 let _votePageCache = { name: null, html: null }
 
-const BROWSER_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1'
+const BROWSER_UAS = [
+  // Safari - iPhone
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+  // Chrome - Android
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
+  // Chrome - iPhone
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/123.0.6312.52 Mobile/15E148 Safari/604.1',
+  // Safari - iPad
+  'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+  // Chrome - Desktop
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+]
+const getBrowserUA = () => BROWSER_UAS[Math.floor(Math.random() * BROWSER_UAS.length)]
 
 /** GETリクエスト */
 const get = async (path) => {
   const url = `${BASE_URL}${path}`
   const res = await fetch(url, {
     credentials: 'include',
-    headers: { 'User-Agent': BROWSER_UA },
+    headers: { 'User-Agent': getBrowserUA() },
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${path}`)
   return await res.text()
@@ -381,7 +396,7 @@ export const vote = async (name, voteType) => {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': BROWSER_UA,
+      'User-Agent': getBrowserUA(),
     },
     body,
   })
