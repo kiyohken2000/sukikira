@@ -281,23 +281,15 @@ export default function Details() {
     if (voteStatus) return
     setVoting(true)
     try {
-      const { resultInfo: info, comments: cmts, nextCursor: cursor, partial } = await vote(name, type)
-      if (info) {
-        setResultInfo(info)
-        setComments(cmts)
-        allCommentsRef.current = cmts
-        setNextCursor(cursor ?? null)
-        setStale(false)
-        cacheResult(name, info, cmts)
-      } else {
-        // 投票は送信済みだが結果取得不可 → リフレッシュを促す
-        setStale(true)
-      }
+      const { resultInfo: info, comments: cmts, nextCursor: cursor } = await vote(name, type)
+      setResultInfo(info)
+      setComments(cmts)
+      allCommentsRef.current = cmts
+      setNextCursor(cursor ?? null)
+      setStale(false)
       recordVote(name, type, info?.imageUrl || paramImageUrl)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      if (partial) {
-        Alert.alert('投票送信済み', '結果の取得に失敗しました。プルダウンで更新してください。')
-      }
+      cacheResult(name, info, cmts)
       // 通知ベルが ON なら再スケジュール（失敗しても投票は成功扱い）
       try {
         if (isNotifyEnabled(name)) {

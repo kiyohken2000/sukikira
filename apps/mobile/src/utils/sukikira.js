@@ -401,9 +401,8 @@ export const vote = async (name, voteType) => {
     return fallback
   }
 
-  // POST 200 だが結果取得不可 → 投票は成功した可能性が高いので partial を返す
-  console.warn('[vote] result empty after POST (post=%d). Returning partial.', html?.length)
-  return { resultInfo: null, comments: [], nextCursor: null, partial: true }
+  console.warn('[vote] result not found. POST html:', html?.length)
+  throw new Error(`投票結果の取得に失敗 (post=${html?.length ?? 0}bytes)`)
 }
 
 // -----------------------------------------------------------------------
