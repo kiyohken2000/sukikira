@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react'
+import React, { useState, useRef, useMemo, useEffect } from 'react'
 import {
   View,
   Text,
@@ -25,9 +25,17 @@ export default function Settings() {
   const { isDark, setIsDark } = useTheme()
   const { ngWords, addNgWord, removeNgWord } = useSettings()
   const [input, setInput] = useState('')
+  const [defaultUA, setDefaultUA] = useState('')
   const tapCountRef = useRef(0)
   const tapTimerRef = useRef(null)
   const styles = useMemo(() => createStyles(colors), [colors])
+
+  useEffect(() => {
+    fetch('https://httpbin.org/user-agent')
+      .then(r => r.json())
+      .then(d => setDefaultUA(d['user-agent'] || ''))
+      .catch(() => setDefaultUA('取得失敗'))
+  }, [])
 
   const handleAdd = () => {
     const word = input.trim()
@@ -130,6 +138,7 @@ export default function Settings() {
                   }
                 }}
               >バージョン {version}</Text>
+              {defaultUA ? <Text style={[styles.aboutSubtitle, { fontSize: 10, marginTop: 2 }]}>UA: {defaultUA}</Text> : null}
               <View style={styles.aboutLinks}>
                 <TouchableOpacity onPress={() => Linking.openURL('https://sukikira.pages.dev/terms.html')}>
                   <Text style={styles.aboutLink}>利用規約</Text>

@@ -35,6 +35,21 @@ const BROWSER_UAS = [
 ]
 const getBrowserUA = () => BROWSER_UAS[Math.floor(Math.random() * BROWSER_UAS.length)]
 
+// デフォルト UA をログ出力（次回 Cloudflare ブロック時の切り分け用）
+let _defaultUALogged = false
+const logDefaultUA = async () => {
+  if (_defaultUALogged) return
+  _defaultUALogged = true
+  try {
+    const res = await fetch('https://httpbin.org/user-agent')
+    const data = await res.json()
+    console.log('[sukikira] default UA:', data['user-agent'])
+  } catch (e) {
+    console.log('[sukikira] default UA: (fetch failed)', e?.message)
+  }
+}
+logDefaultUA()
+
 /** GETリクエスト */
 const get = async (path) => {
   const url = `${BASE_URL}${path}`
