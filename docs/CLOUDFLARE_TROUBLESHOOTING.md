@@ -70,15 +70,36 @@ export const getComments = async (name) => {
 
 ## 既知の回避策
 
-### GETリクエスト: カスタムヘッダーを付けない
+### 全リクエスト: ブラウザ風 User-Agent を設定（2026-03 更新）
+
+2026-03 に Cloudflare がネイティブ HTTP クライアント（Android: OkHttp、iOS: NSURLSession）のデフォルト User-Agent をボット判定し始めた。ヘッダーなし fetch でも空ボディが返るようになったため、ブラウザ風 UA を明示的に設定する方式に変更。
 
 ```javascript
-// NG: Cloudflare に空ボディにされる
-const res = await fetch(url, { headers: { 'User-Agent': '...', Accept: '...' } })
+const BROWSER_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1'
 
-// OK: ヘッダーなし
-const res = await fetch(url, { credentials: 'include' })
+// GET
+const res = await fetch(url, {
+  credentials: 'include',
+  headers: { 'User-Agent': BROWSER_UA },
+})
+
+// POST
+const res = await fetch(url, {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'User-Agent': BROWSER_UA,
+  },
+  body,
+})
 ```
+
+**重要な注意点:**
+- 開発ビルドでは再現しない（開発クライアントの UA は本番と異なる）
+- `--no-dev` モード（`npx expo start --no-dev`）でも再現しないことがある
+- iOS / Android 両方で同時に発生する
+- 本番ビルドでのみ発生するため、デバッグが困難。エラーメッセージに詳細（レスポンスサイズ等）を含めることが重要
 
 ### 検索API: タイムスタンプでキャッシュバスト
 
@@ -92,16 +113,16 @@ const res = await fetch(`${BASE_URL}/search/search?q=${q}&sk_token=${token}`)
 const res = await fetch(`${BASE_URL}/search/search?q=${q}&sk_token=${token}&_t=${Date.now()}`)
 ```
 
-### POSTリクエスト: 最小限のヘッダーのみ
+### POSTリクエスト: Content-Type + User-Agent のみ
 
 ```javascript
 const res = await fetch(url, {
   method: 'POST',
+  credentials: 'include',
   headers: {
     'Content-Type': 'application/x-www-form-urlencoded',
-    Origin: BASE_URL,
-    Referer: '...',
-    // User-Agent, Accept, Accept-Language は付けない
+    'User-Agent': BROWSER_UA,
+    // Origin, Referer, Accept, Accept-Language は付けない
   },
   body,
 })
@@ -142,7 +163,9 @@ Workers 内の `fetch()` でも suki-kira.com から **Cloudflare チャレン�
 **結論:** Workers の IP レンジも Cloudflare にブロックされている。
 Pages Functions も同じランタイムのため同様にブロックされると推測。
 
-## アクセス元別のブロック状況（2026-02-26 時点）
+## アクセス元別のブロック状況
+
+### 2026-02-26 時点
 
 | アクセス元 | result ページ | 個別コメント API | `?nxc=` |
 |---|---|---|---|
@@ -153,7 +176,18 @@ Pages Functions も同じランタイムのため同様にブロックされる�
 | curl | ✗ チャレンジ | ✗ チャレンジ | ✗ チャレンジ |
 | 実ブラウザ (Chrome) | ✓ 成功 | ✓ 成功 | ✓ 成功 |
 
-## 時系列（2026-02-25 の事例）
+### 2026-03-10 時点（WAF ルール変更後）
+
+| アクセス元 | result ページ | 投票 POST |
+|---|---|---|
+| 本番アプリ fetch (ヘッダーなし) | ✗ 空ボディ | ✗ 空ボディ |
+| 本番アプリ fetch (ブラウザ UA 付き) | ✓ 成功 | ✓ 成功 |
+| 開発ビルド fetch (ヘッダーなし) | ✓ 成功 | ✓ 成功 |
+| `--no-dev` モード | ✓ 成功 | ✓ 成功 |
+
+## 時系列
+
+### 事例1: 2026-02-25 — カスタムヘッダーによる空ボディ
 
 1. 投票エラー発生。ストア版でも再現 → コード変更が原因ではない
 2. Python では正常取得 → サーバーは生きている
@@ -162,3 +196,22 @@ Pages Functions も同じランタイムのため同様にブロックされる�
 5. 検索 API は Python でも空 → Cloudflare キャッシュの問題
 6. `&_t=timestamp` 追加 → 検索復旧
 7. POST の `...HEADERS` を除去 → コメント投稿復旧
+
+### 事例2: 2026-03-10 — デフォルト UA によるボット判定
+
+1. 本番アプリで投票が「投票に失敗しました」エラー。開発ビルドでは正常
+2. 同じコードで昨日まで問題なし → サーバー側（Cloudflare）の変更
+3. エラー詳細を表示するよう修正 → `Cannot read property 'imageUrl' of null`（vote() が resultInfo: null を返す）
+4. さらに詳細追加 → `post=0, fallback=0bytes`（POST レスポンスも fallback GET も空ボディ）
+5. `credentials: 'include'` 追加・Origin/Referer 除去 → 変化なし
+6. `getComments` 経由の fallback → 変化なし
+7. リトライ（1秒/2秒/3秒待ち） → 変化なし
+8. `--no-dev` モードでテスト → 投票成功（再現せず）
+9. **ブラウザ風 User-Agent（`BROWSER_UA`）を全リクエストに設定 → 本番で投票復旧**
+
+**教訓:**
+- Cloudflare は予告なく WAF ルールを変更する
+- 開発ビルドと本番ビルドで HTTP クライアントのデフォルト UA が異なる
+- 「ヘッダーなし」が安全とは限らない — デフォルト UA 自体がブロック対象になりうる
+- 本番でのみ再現する問題は、エラーメッセージに詳細（レスポンスサイズ、HTTP ステータス等）を含めて切り分ける
+- `--no-dev` でも再現しない場合がある。ネイティブバイナリの違い（EAS Build vs dev client）が原因の可能性
