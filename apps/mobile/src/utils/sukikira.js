@@ -19,19 +19,19 @@ const BASE_URL = 'https://suki-kira.com'
 let _votePageCache = { name: null, html: null }
 
 const BROWSER_UAS = [
-  // Safari - iPhone
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1',
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+  // Safari - iPhone (iOS 19)
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 19_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.3 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 19_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.2 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1',
   // Chrome - Android
-  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
-  'Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 15; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36',
   // Chrome - iPhone
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/123.0.6312.52 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 19_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/134.0.6998.42 Mobile/15E148 Safari/604.1',
   // Safari - iPad
-  'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.3 Safari/605.1.15',
   // Chrome - Desktop
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
 ]
 // セッション単位で UA を固定（同一 IP からリクエストごとに UA が変わる不自然さを回避）
 let _currentUAIndex = Math.floor(Math.random() * BROWSER_UAS.length)
@@ -43,6 +43,12 @@ const rotateUA = () => {
   SESSION_UA = BROWSER_UAS[_currentUAIndex]
   console.log('[sukikira] UA rotated to:', SESSION_UA.slice(0, 40))
   return SESSION_UA
+}
+
+// ブラウザが標準で送るヘッダー（UA 以外）
+const BROWSER_HEADERS = {
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
 }
 
 // デフォルト UA をログ出力（次回 Cloudflare ブロック時の切り分け用）
@@ -65,7 +71,7 @@ const get = async (path) => {
   const url = `${BASE_URL}${path}`
   const res = await fetch(url, {
     credentials: 'include',
-    headers: { 'User-Agent': getBrowserUA() },
+    headers: { ...BROWSER_HEADERS, 'User-Agent': getBrowserUA() },
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${path}`)
   const text = await res.text()
@@ -76,7 +82,7 @@ const get = async (path) => {
   await new Promise(r => setTimeout(r, 500))
   const retry = await fetch(url, {
     credentials: 'include',
-    headers: { 'User-Agent': getBrowserUA() },
+    headers: { ...BROWSER_HEADERS, 'User-Agent': getBrowserUA() },
   })
   if (!retry.ok) throw new Error(`HTTP ${retry.status}: ${path} (retry)`)
   return await retry.text()
@@ -181,7 +187,7 @@ export const search = async (query) => {
   // 2. JSON API から検索結果取得
   // Cloudflare キャッシュバスト: タイムスタンプを付与して空レスポンスのキャッシュを回避
   const apiUrl = `${BASE_URL}/search/search?q=${q}${token ? `&sk_token=${token}` : ''}&_t=${Date.now()}`
-  const apiRes = await fetch(apiUrl, { headers: { 'User-Agent': getBrowserUA() } })
+  const apiRes = await fetch(apiUrl, { headers: { ...BROWSER_HEADERS, 'User-Agent': getBrowserUA() } })
   if (!apiRes.ok) throw new Error(`HTTP ${apiRes.status}: /search/search`)
   const apiText = await apiRes.text()
   if (!apiText || apiText === 'Invalid Token') throw new Error('検索サーバーが応答しません。しばらく時間をおいて再度お試しください')
@@ -296,7 +302,7 @@ export const getMoreComments = async (name, cursor, pid, skToken) => {
   let misses = 0
   for (let id = startId; id > 0 && comments.length < 20 && misses < 10; id--) {
     try {
-      const res = await fetch(`${BASE_URL}/p/${pid}/c/${id}/t/${skToken}`, { credentials: 'include', headers: { 'User-Agent': getBrowserUA() } })
+      const res = await fetch(`${BASE_URL}/p/${pid}/c/${id}/t/${skToken}`, { credentials: 'include', headers: { ...BROWSER_HEADERS, 'User-Agent': getBrowserUA() } })
       const text = await res.text()
       if (!text || text.length < 10) { misses++; continue }
       const data = JSON.parse(text)
@@ -431,8 +437,11 @@ export const vote = async (name, voteType) => {
     method: 'POST',
     credentials: 'include',
     headers: {
+      ...BROWSER_HEADERS,
       'Content-Type': 'application/x-www-form-urlencoded',
       'User-Agent': getBrowserUA(),
+      Origin: BASE_URL,
+      Referer: `${BASE_URL}/people/vote/${encodedName}`,
     },
     body,
   })
@@ -473,9 +482,11 @@ export const voteComment = async (pidHash, commentId, voteType, token, xdate) =>
   const res = await fetch(url, {
     method: 'POST',
     headers: {
+      ...BROWSER_HEADERS,
       'Content-Type': 'application/x-www-form-urlencoded',
       'User-Agent': getBrowserUA(),
       Origin: BASE_URL,
+      Referer: BASE_URL,
     },
     body,
   })
@@ -517,6 +528,7 @@ export const postComment = async (name, commentBody, commentType = '1') => {
   const res = await fetch(`${BASE_URL}${action}`, {
     method: 'POST',
     headers: {
+      ...BROWSER_HEADERS,
       'Content-Type': 'application/x-www-form-urlencoded',
       'User-Agent': getBrowserUA(),
       Origin: BASE_URL,
