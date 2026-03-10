@@ -389,18 +389,15 @@ export const vote = async (name, voteType) => {
     return { resultInfo: parseResult(html), comments: cmts, nextCursor }
   }
 
-  // POSTレスポンスが空の場合、少し待ってから getComments で結果を再取得
-  // （POST直後はCloudflareが空ボディを返すことがある）
-  for (let retry = 0; retry < 3; retry++) {
-    await new Promise(r => setTimeout(r, 1000 * (retry + 1)))
-    const fallback = await getComments(name)
-    if (fallback.resultInfo) {
-      return fallback
-    }
+  // POSTレスポンスが空の場合、getComments で結果を再取得
+  const fallback = await getComments(name)
+  if (fallback.resultInfo) {
+    return fallback
   }
 
-  console.warn('[vote] result not found after retries. POST html:', html?.length)
-  throw new Error(`投票結果の取得に失敗 (post=${html?.length ?? 0}bytes)`)
+  // POST 200 だが結果取得不可 → 投票は成功した可能性が高いので partial を返す
+  console.warn('[vote] result empty after POST (post=%d). Returning partial.', html?.length)
+  return { resultInfo: null, comments: [], nextCursor: null, partial: true }
 }
 
 // -----------------------------------------------------------------------
