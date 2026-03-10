@@ -128,19 +128,22 @@ const res = await fetch(url, {
 })
 ```
 
-### UA 未設定のエンドポイント（2026-03-10 時点で正常動作中）
+### 全エンドポイントに UA 設定済み（2026-03-10 更新）
 
-以下のエンドポイントは UA を設定せずに動作しているため、変更していない。
-将来ブロックされた場合は `getBrowserUA()` を追加すること。
+当初は動作中のエンドポイントには手を加えない方針だったが、以下の理由で全 fetch に `getBrowserUA()` を統一適用した:
 
-| 関数 | エンドポイント | 現在のヘッダー |
+- 同一アプリから一部はブラウザ UA、一部はネイティブ UA が混在するのは不自然
+- Cloudflare が他のエンドポイントにも同じルールを適用するのは時間の問題
+- UA ヘッダー追加はリスクが低い
+
+| 関数 | エンドポイント | ヘッダー |
 |---|---|---|
-| `search` | `/search/search` (GET) | ヘッダーなし |
-| `getMoreComments` | `/p/{pid}/c/{cid}/t/{sk_token}` (GET) | credentials のみ |
-| `voteComment` | `api.suki-kira.com/comment/vote` (POST) | Content-Type + Origin |
-| `postComment` | `/people/result/{name}` (POST) | Content-Type + Origin + Referer |
-
-**注意:** 動いているものは触らない。ブロックされてから対処する。
+| `get()` | 全 GET リクエスト | credentials + User-Agent |
+| `vote` | `/people/result/{name}` (POST) | Content-Type + User-Agent |
+| `search` | `/search/search` (GET) | User-Agent |
+| `getMoreComments` | `/p/{pid}/c/{cid}/t/{sk_token}` (GET) | credentials + User-Agent |
+| `voteComment` | `api.suki-kira.com/comment/vote` (POST) | Content-Type + User-Agent + Origin |
+| `postComment` | `/people/comment/{name}` (POST) | Content-Type + User-Agent + Origin + Referer |
 
 ### 二重 fetch 回避: _votePageCache
 
@@ -262,10 +265,12 @@ CFNetwork・Darwin バージョンは同一で、ビルド番号のみ異なる�
 - 「非ブラウザ UA × 多数の異なる IP から同一パターン × 一定の頻度」がボットネットのパターンに類似
 - 開発ビルドは1人しか使わないためスコアが閾値に達しなかった
 
-### 対策: UA ランダム化
+### 対策: セッション固定 UA ランダム化
 
-`BROWSER_UAS` 配列に複数のブラウザ UA を定義し、リクエストごとにランダムに選択する方式を導入。
-これにより、リクエストが通常のブラウザアクセスのパターンに近づく。
+`BROWSER_UAS` 配列に8パターンのブラウザ UA を定義し、**セッション（モジュールロード）単位でランダムに1つ選択して固定**する方式を導入。全 fetch リクエストに統一適用。
+
+- リクエストごとに UA を変えると同一 IP からの不自然なパターンになるため、セッション単位で固定
+- アプリ再起動で新しい UA が選ばれるため、長期的には分散する
 
 ## 再発リスクと対処の難易度
 
