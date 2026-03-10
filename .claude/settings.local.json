@@ -40,7 +40,10 @@
       "Bash(cd /c/Users/all/develop/expo/sukikira/workers/comment-proxy && npx wrangler deploy 2>&1 && curl -s \"https://sukikira-comment-proxy.votepurchase.workers.dev/debug?name=%E6%9C%A8%E6%9D%91%E6%8B%93%E5%93%89\" 2>&1)",
       "WebFetch(domain:blog.s2mr.jp)",
       "Bash(yarn build:*)",
-      "Bash(npx wrangler:*)"
+      "Bash(npx wrangler:*)",
+      "Bash(git add apps/mobile/src/config.js apps/mobile/src/scenes/details/Details.js apps/mobile/src/utils/sukikira.js && git commit -m \"$\\(cat <<'EOF'\n投票エラー処理の改善: 通知再スケジュールを独立try-catchに分離、エラー詳細表示\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)",
+      "Bash(git add apps/mobile/src/scenes/details/Details.js apps/mobile/src/utils/sukikira.js && git commit -m \"$\\(cat <<'EOF'\nfix: info null crash on vote + add diagnostic for empty vote result\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push)"
     ]
   }
 }
