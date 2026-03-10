@@ -70,36 +70,43 @@ export const getComments = async (name) => {
 
 ## 既知の回避策
 
-### 全リクエスト: ブラウザ風 User-Agent を設定（2026-03 更新）
+### 全リクエスト: ブラウザ風ヘッダーを設定（2026-03-10 更新）
 
-2026-03 に Cloudflare がネイティブ HTTP クライアント（Android: OkHttp、iOS: NSURLSession）のデフォルト User-Agent をボット判定し始めた。ヘッダーなし fetch でも空ボディが返るようになったため、ブラウザ風 UA を明示的に設定する方式に変更。
+2026-03 に Cloudflare がネイティブ HTTP クライアント（Android: OkHttp、iOS: NSURLSession）のデフォルト User-Agent をボット判定し始めた。ブラウザ風 UA だけでなく、`Accept` / `Accept-Language` 等の標準ヘッダーも含めないとブロックされる。
 
 ```javascript
-const BROWSER_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1'
+// ブラウザ標準ヘッダー（UA 以外）
+const BROWSER_HEADERS = {
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+}
 
 // GET
 const res = await fetch(url, {
   credentials: 'include',
-  headers: { 'User-Agent': BROWSER_UA },
+  headers: { ...BROWSER_HEADERS, 'User-Agent': getBrowserUA() },
 })
 
-// POST
+// POST（Origin / Referer も必須）
 const res = await fetch(url, {
   method: 'POST',
   credentials: 'include',
   headers: {
+    ...BROWSER_HEADERS,
     'Content-Type': 'application/x-www-form-urlencoded',
-    'User-Agent': BROWSER_UA,
+    'User-Agent': getBrowserUA(),
+    Origin: BASE_URL,
+    Referer: `${BASE_URL}/people/vote/${encodedName}`,
   },
   body,
 })
 ```
 
 **重要な注意点:**
-- 開発ビルドでは再現しない（開発クライアントの UA は本番と異なる）
-- `--no-dev` モード（`npx expo start --no-dev`）でも再現しないことがある
-- iOS / Android 両方で同時に発生する
-- 本番ビルドでのみ発生するため、デバッグが困難。エラーメッセージに詳細（レスポンスサイズ等）を含めることが重要
+- UA だけ設定しても不十分。Cloudflare は**ヘッダーの組み合わせ**でスコアリングする
+- UA が Chrome なのに `Accept` / `Accept-Language` がないと「UA 偽装ボット」と判定される
+- POST に `Origin` / `Referer` がないとブラウザのフォーム送信として不自然
+- UA のバージョンが古すぎるとブロックされる（2年前の UA は NG）→ 定期的な更新が必要
 
 ### 検索API: タイムスタンプでキャッシュバスト
 
@@ -113,37 +120,37 @@ const res = await fetch(`${BASE_URL}/search/search?q=${q}&sk_token=${token}`)
 const res = await fetch(`${BASE_URL}/search/search?q=${q}&sk_token=${token}&_t=${Date.now()}`)
 ```
 
-### POSTリクエスト: Content-Type + User-Agent のみ
+### POSTリクエスト: 全ブラウザヘッダー + Origin/Referer
 
 ```javascript
 const res = await fetch(url, {
   method: 'POST',
   credentials: 'include',
   headers: {
+    ...BROWSER_HEADERS,
     'Content-Type': 'application/x-www-form-urlencoded',
-    'User-Agent': BROWSER_UA,
-    // Origin, Referer, Accept, Accept-Language は付けない
+    'User-Agent': getBrowserUA(),
+    Origin: BASE_URL,
+    Referer: `${BASE_URL}/people/vote/${encodedName}`,
   },
   body,
 })
 ```
 
-### 全エンドポイントに UA 設定済み（2026-03-10 更新）
+以前は `Content-Type + User-Agent` のみで動いていたが、2026-03-10 にブロックされるようになった。
 
-当初は動作中のエンドポイントには手を加えない方針だったが、以下の理由で全 fetch に `getBrowserUA()` を統一適用した:
+### 全エンドポイントにブラウザヘッダー設定済み（2026-03-10 更新）
 
-- 同一アプリから一部はブラウザ UA、一部はネイティブ UA が混在するのは不自然
-- Cloudflare が他のエンドポイントにも同じルールを適用するのは時間の問題
-- UA ヘッダー追加はリスクが低い
+全 fetch に `BROWSER_HEADERS` + `getBrowserUA()` を統一適用。POST には `Origin` / `Referer` も追加。
 
 | 関数 | エンドポイント | ヘッダー |
 |---|---|---|
-| `get()` | 全 GET リクエスト | credentials + User-Agent |
-| `vote` | `/people/result/{name}` (POST) | Content-Type + User-Agent |
-| `search` | `/search/search` (GET) | User-Agent |
-| `getMoreComments` | `/p/{pid}/c/{cid}/t/{sk_token}` (GET) | credentials + User-Agent |
-| `voteComment` | `api.suki-kira.com/comment/vote` (POST) | Content-Type + User-Agent + Origin |
-| `postComment` | `/people/comment/{name}` (POST) | Content-Type + User-Agent + Origin + Referer |
+| `get()` | 全 GET リクエスト | BROWSER_HEADERS + credentials + User-Agent |
+| `vote` | `/people/result/{name}` (POST) | BROWSER_HEADERS + Content-Type + User-Agent + Origin + Referer |
+| `search` | `/search/search` (GET) | BROWSER_HEADERS + User-Agent |
+| `getMoreComments` | `/p/{pid}/c/{cid}/t/{sk_token}` (GET) | BROWSER_HEADERS + credentials + User-Agent |
+| `voteComment` | `api.suki-kira.com/comment/vote` (POST) | BROWSER_HEADERS + Content-Type + User-Agent + Origin + Referer |
+| `postComment` | `/people/comment/{name}` (POST) | BROWSER_HEADERS + Content-Type + User-Agent + Origin + Referer |
 
 ### 二重 fetch 回避: _votePageCache
 
@@ -198,7 +205,9 @@ Pages Functions も同じランタイムのため同様にブロックされる�
 | アクセス元 | result ページ | 投票 POST |
 |---|---|---|
 | 本番アプリ fetch (ヘッダーなし) | ✗ 空ボディ | ✗ 空ボディ |
-| 本番アプリ fetch (ブラウザ UA 付き) | ✓ 成功 | ✓ 成功 |
+| 本番アプリ fetch (旧 UA のみ) | ✗ 空ボディ | ✗ 空ボディ |
+| 本番アプリ fetch (現行 UA + BROWSER_HEADERS) | ✓ 成功 | ✓ 成功 |
+| 開発ビルド fetch (旧 UA のみ) | ✗ 空ボディ | ✗ 空ボディ |
 | 開発ビルド fetch (ヘッダーなし) | ✓ 成功 | ✓ 成功 |
 | `--no-dev` モード | ✓ 成功 | ✓ 成功 |
 
@@ -245,6 +254,22 @@ Pages Functions も同じランタイムのため同様にブロックされる�
 - 本番でのみ再現する問題は、エラーメッセージに詳細（レスポンスサイズ、HTTP ステータス等）を含めて切り分ける
 - `--no-dev` でも再現しない場合がある。ネイティブバイナリの違い（EAS Build vs dev client）が原因の可能性
 
+### 事例3: 2026-03-10 — UA だけでは不十分、ヘッダー全体の整合性が必要
+
+1. 投票時に 0bytes エラー。再起動しても改善しない。**開発ビルドでも再現**
+2. UA ローテーション（別の UA でリトライ）を実装 → 改善せず
+3. UA リストが2年前のバージョン（Chrome 122, iOS 17.4）であることを発見
+4. UA を現行バージョン（Chrome 145, iOS 26/18.4）に更新
+5. `Accept` / `Accept-Language` ヘッダーを全リクエストに追加（`BROWSER_HEADERS` 定数）
+6. 投票 POST に `Origin` / `Referer` ヘッダーを追加
+
+**教訓:**
+- UA 文字列を偽装しても、`Accept` / `Accept-Language` がなければ「UA 偽装ボット」と判定される
+- Cloudflare は**ヘッダーの組み合わせ（composite signal）**でボットスコアリングする
+- POST に `Origin` / `Referer` がないとブラウザのフォーム送信として不自然
+- UA のバージョンは定期的に更新が必要（2年前のバージョンはボット判定リスク大）
+- 空レスポンス時の自動 UA ローテーション + リトライを `get()` に組み込み
+
 ## 本番ビルドのみブロックされた原因の考察
 
 ### デフォルト UA の調査結果
@@ -265,12 +290,15 @@ CFNetwork・Darwin バージョンは同一で、ビルド番号のみ異なる�
 - 「非ブラウザ UA × 多数の異なる IP から同一パターン × 一定の頻度」がボットネットのパターンに類似
 - 開発ビルドは1人しか使わないためスコアが閾値に達しなかった
 
-### 対策: セッション固定 UA ランダム化
+### 対策: セッション固定 UA ランダム化 + 空レスポンス時ローテーション
 
-`BROWSER_UAS` 配列に8パターンのブラウザ UA を定義し、**セッション（モジュールロード）単位でランダムに1つ選択して固定**する方式を導入。全 fetch リクエストに統一適用。
+`BROWSER_UAS` 配列に8パターンの**現行バージョン**ブラウザ UA を定義し、**セッション（モジュールロード）単位でランダムに1つ選択して固定**する方式を導入。全 fetch リクエストに統一適用。
 
 - リクエストごとに UA を変えると同一 IP からの不自然なパターンになるため、セッション単位で固定
 - アプリ再起動で新しい UA が選ばれるため、長期的には分散する
+- **空レスポンス検出時は自動で次の UA にローテーション**してリトライ（`get()` 内で実装）
+- UA のバージョンは定期的に現行ブラウザに合わせて更新すること（古い UA はボット判定される）
+- UA だけでなく `Accept` / `Accept-Language` も全リクエストに設定（`BROWSER_HEADERS` 定数）
 
 ## 再発リスクと対処の難易度
 
