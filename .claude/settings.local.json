@@ -59,7 +59,9 @@
       "WebFetch(domain:apps.apple.com)",
       "Bash(nslookup -type=NS bakusai.com 8.8.8.8 2>/dev/null)",
       "WebFetch(domain:saikeisai.hatenablog.com)",
-      "Bash(nslookup mqtt3.bakusai.com 8.8.8.8 2>/dev/null)"
+      "Bash(nslookup mqtt3.bakusai.com 8.8.8.8 2>/dev/null)",
+      "Bash(cd C:/Users/all/develop/expo/bakusai/apps/web && npm create vite@latest . -- --template react 2>&1)",
+      "Bash(cd C:/Users/all/develop/expo/bakusai/apps/web && npm install 2>&1)"
     ]
   }
 }
