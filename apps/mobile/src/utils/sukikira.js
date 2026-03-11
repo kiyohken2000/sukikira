@@ -23,15 +23,30 @@ const BROWSER_UAS = [
   'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1',
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1',
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_3_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3.2 Mobile/15E148 Safari/604.1',
-  // Chrome - Android
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Mobile/15E148 Safari/604.1',
+  // Chrome - Android (various devices)
   'Mozilla/5.0 (Linux; Android 16; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.160 Mobile Safari/537.36',
   'Mozilla/5.0 (Linux; Android 15; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.160 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 15; SM-A556B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.160 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 16; Pixel 8a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.160 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 15; SM-S926B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.160 Mobile Safari/537.36',
   // Chrome - iPhone
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/145.0.7632.160 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/145.0.7632.160 Mobile/15E148 Safari/604.1',
   // Safari - iPad (Desktop mode UA)
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15',
   // Chrome - Desktop
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.160 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.160 Safari/537.36',
+  // Firefox - Android / Desktop
+  'Mozilla/5.0 (Android 15; Mobile; rv:138.0) Gecko/138.0 Firefox/138.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0',
+  // Edge - Desktop
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.160 Safari/537.36 Edg/145.0.7632.160',
+  // Samsung Browser - Android
+  'Mozilla/5.0 (Linux; Android 15; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/27.0 Chrome/139.0.6945.136 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 15; SM-S926B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/27.0 Chrome/139.0.6945.136 Mobile Safari/537.36',
 ]
 // セッション単位で UA を固定（同一 IP からリクエストごとに UA が変わる不自然さを回避）
 let _currentUAIndex = Math.floor(Math.random() * BROWSER_UAS.length)
@@ -66,7 +81,9 @@ const logDefaultUA = async () => {
 }
 logDefaultUA()
 
-/** GETリクエスト（空レスポンス時は UA ローテーション+リトライ） */
+const MAX_RETRIES = 8
+
+/** GETリクエスト（空レスポンス時は UA ローテーション+最大 MAX_RETRIES 回リトライ） */
 const get = async (path) => {
   const url = `${BASE_URL}${path}`
   const res = await fetch(url, {
@@ -77,15 +94,19 @@ const get = async (path) => {
   const text = await res.text()
   if (text && text.length > 0) return text
   // Cloudflare が空ボディを返した場合、UA をローテーションしてリトライ
-  console.warn(`[sukikira] empty response for ${path}, rotating UA and retrying`)
-  rotateUA()
-  await new Promise(r => setTimeout(r, 500))
-  const retry = await fetch(url, {
-    credentials: 'include',
-    headers: { ...BROWSER_HEADERS, 'User-Agent': getBrowserUA() },
-  })
-  if (!retry.ok) throw new Error(`HTTP ${retry.status}: ${path} (retry)`)
-  return await retry.text()
+  for (let i = 1; i <= MAX_RETRIES; i++) {
+    console.warn(`[sukikira] empty response for ${path}, retry ${i}/${MAX_RETRIES} with new UA`)
+    rotateUA()
+    await new Promise(r => setTimeout(r, 300 + i * 200))
+    const retry = await fetch(url, {
+      credentials: 'include',
+      headers: { ...BROWSER_HEADERS, 'User-Agent': getBrowserUA() },
+    })
+    if (!retry.ok) throw new Error(`HTTP ${retry.status}: ${path} (retry ${i})`)
+    const retryText = await retry.text()
+    if (retryText && retryText.length > 0) return retryText
+  }
+  throw new Error(`空レスポンス: ${path} (${MAX_RETRIES + 1}回試行, 全UA失敗)`)
 }
 
 /** 人物名を URL パスに使える形式にエンコード */

@@ -270,6 +270,26 @@ Pages Functions も同じランタイムのため同様にブロックされる�
 - UA のバージョンは定期的に更新が必要（2年前のバージョンはボット判定リスク大）
 - 空レスポンス時の自動 UA ローテーション + リトライを `get()` に組み込み
 
+### 事例4: 2026-03-11 — BROWSER_HEADERS + UA ローテーション実装後も再発
+
+1. 事例3 の対策（BROWSER_HEADERS + 現行 UA + ローテーション + リトライ）をコミット済み
+2. 投票時に 0bytes エラーが再発
+3. 何度かアプリを再起動すると投票できるようになる
+4. 一度投票できるようになると、以降はアプリを再起動しても継続して投票可能
+
+**考察:**
+- TLS フィンガープリントは同じ OS・SDK なら再起動しても変わらないため、TLS が原因なら「常にブロック」になるはず。再起動で直ることと矛盾する
+- 再起動で変わるのは **UA 文字列**（ランダム再選択）と **TCP コネクション**（新規接続）
+- Cloudflare のボットスコアリングに **UA ごとのスコア差**や**タイミングによる揺らぎ**がある可能性
+- 一度通ると `cf_clearance` 等の信頼クッキーが `credentials: 'include'` 経由でネイティブクッキージャーに保持され、以降は信頼済みとなる
+- **根本原因は未確定**。UA の当たり外れ、Cloudflare 側のスコアリング揺らぎ、またはまだ特定できていない要素の可能性がある
+
+**対策: UA パターン拡充 + リトライ回数強化**
+- UA パターンを 8 → 20 に拡充（Safari/Chrome/Firefox/Edge/Samsung Browser × iPhone/Android/Desktop）
+- リトライ回数を 1 → 最大 8 に増加（初回含め最大 9 UA を試行）
+- 待ち時間は 500ms → 1900ms に段階的増加（全失敗時の最大待ち時間: 約 9.6 秒）
+- 「何度か再起動すると直る」動作をアプリ再起動なしで自動的に再現する狙い
+
 ## 本番ビルドのみブロックされた原因の考察
 
 ### デフォルト UA の調査結果
@@ -292,13 +312,27 @@ CFNetwork・Darwin バージョンは同一で、ビルド番号のみ異なる�
 
 ### 対策: セッション固定 UA ランダム化 + 空レスポンス時ローテーション
 
-`BROWSER_UAS` 配列に8パターンの**現行バージョン**ブラウザ UA を定義し、**セッション（モジュールロード）単位でランダムに1つ選択して固定**する方式を導入。全 fetch リクエストに統一適用。
+`BROWSER_UAS` 配列に20パターンの**現行バージョン**ブラウザ UA を定義し、**セッション（モジュールロード）単位でランダムに1つ選択して固定**する方式を導入。全 fetch リクエストに統一適用。
 
 - リクエストごとに UA を変えると同一 IP からの不自然なパターンになるため、セッション単位で固定
 - アプリ再起動で新しい UA が選ばれるため、長期的には分散する
-- **空レスポンス検出時は自動で次の UA にローテーション**してリトライ（`get()` 内で実装）
+- **空レスポンス検出時は自動で次の UA にローテーション**して最大8回リトライ（`get()` 内で実装）
+- 初回含め最大9つの UA を1セッション内で試行（再起動を繰り返すのと同等の効果）
+- 待ち時間は 500ms〜1900ms に段階的増加（全失敗時の最大待ち時間: 約 9.6 秒）
 - UA のバージョンは定期的に現行ブラウザに合わせて更新すること（古い UA はボット判定される）
 - UA だけでなく `Accept` / `Accept-Language` も全リクエストに設定（`BROWSER_HEADERS` 定数）
+
+UA パターン内訳（20種）:
+| ブラウザ | プラットフォーム | パターン数 |
+|---|---|---|
+| Safari | iPhone (iOS 26/18.4/18.3.2/18.3) | 4 |
+| Chrome | Android (Pixel 9/8a, Galaxy S24 Ultra/A55/S24+) | 5 |
+| Chrome | iPhone (iOS 18.4/26) | 2 |
+| Safari | iPad (Desktop mode) | 1 |
+| Chrome | Desktop (Windows/Mac) | 2 |
+| Firefox | Android / Desktop (Windows/Mac) | 3 |
+| Edge | Desktop (Windows) | 1 |
+| Samsung Browser | Android (Galaxy S24 Ultra/S24+) | 2 |
 
 ## 再発リスクと対処の難易度
 
@@ -323,6 +357,47 @@ TLS ブロック時もレスポンスは UA ブロックと同じ（200 + 空ボ
 同じ Expo SDK で再ビルドしても TLS フィンガープリントは変わらない（HTTP クライアント = OkHttp / NSURLSession のバージョンが同じため）。
 
 対処の選択肢:
-1. **Expo SDK のメジャーアップグレード** — OkHttp 等が更新される可能性があるが確実ではない
-2. **カスタムネイティブモジュール** — 別の HTTP クライアントを使う（大がかり）
-3. **自前プロキシサーバー** — ブラウザの TLS で中継する（Cloudflare Workers は同様にブロックされるため別サーバーが必要）
+1. **WebView 方式（推奨）** — 後述の「WebView 投票方式」を参照
+2. **Expo SDK のメジャーアップグレード** — OkHttp 等が更新される可能性があるが確実ではない
+3. **カスタムネイティブモジュール** — 別の HTTP クライアントを使う（大がかり）
+4. **自前プロキシサーバー** — ブラウザの TLS で中継する（Cloudflare Workers は同様にブロックされるため別サーバーが必要）
+
+## WebView 投票方式（次の対策候補）
+
+### 背景
+
+BROWSER_HEADERS + UA ローテーション + リトライを実装しても、0bytes エラーが再発する。
+根本原因は未確定だが、React Native の `fetch` が Cloudflare のボットスコアリングでブロックされることがある。
+
+再起動で直ることがある挙動から、TLS フィンガープリント単独では原因を説明できない（TLS は再起動で変わらないため）。UA の当たり外れ、Cloudflare 側のスコアリング揺らぎ、または未特定の要素が関与している可能性がある。
+
+いずれにせよ、WebView は実ブラウザエンジンを使うため、Cloudflare が判定に使うあらゆるシグナル（UA、ヘッダー、TLS、クッキー、JS 実行能力）が本物のブラウザと一致する。根本原因が何であっても WebView 方式なら回避できる。
+
+### 方針: WebView で投票フローを完結させる
+
+`react-native-webview` は実ブラウザエンジン（iOS: WKWebView / Android: Chromium WebView）を使うため、TLS フィンガープリントも本物のブラウザと一致する。投票フローを WebView 内で完結させることで Cloudflare を根本的に回避する。
+
+### 実装手順
+
+1. **非表示の WebView** を投票時にマウントする（`style={{ height: 0, width: 0, opacity: 0 }}`）
+2. WebView の `source` に `/people/vote/{name}` を設定してロード
+3. `injectedJavaScript` でトークン（`id`, `auth1`, `auth2`, `auth-r`）を抽出し、`window.ReactNativeWebView.postMessage(JSON.stringify(tokens))` で RN に送信
+4. RN 側の `onMessage` でトークンを受信後、WebView に投票フォーム submit を実行する JS を inject
+5. submit 後の結果ページ HTML を再度 `postMessage` で返す
+6. RN 側で結果 HTML を parseResult / parseComments して UI に反映
+7. 投票完了後に WebView をアンマウント
+
+### ポイント
+
+- **初期ロードは成功する**（2026-02-28 検証で確認済み）。投票は1回のロード + 1回の submit で完結するため、「ページ遷移後に JS 実行不可」問題には該当しない
+- フォーム submit は `XMLHttpRequest` か `fetch` を WebView 内から実行する方式（ページ遷移ではなく XHR）にすればナビゲーションなしで完結
+- WebView 内の fetch は実ブラウザの TLS + クッキーを使うため、Cloudflare のボットスコアが低くなる
+- WebView のクッキーは WKWebView / Chromium のクッキーストアに保存され、`credentials: 'include'` の RN fetch とは独立
+- 既存の `get()` によるフォールバック（RN fetch 方式）は残しておき、WebView がタイムアウトした場合の代替とする
+
+### 注意点
+
+- WebView のマウント/アンマウントにはレンダリングコストがある → 投票ボタン押下時のみマウント
+- WebView 内の JS が `postMessage` を返す前にタイムアウトした場合のハンドリングが必要
+- Android と iOS で WebView のクッキー挙動が異なる場合がある → 両プラットフォームでテスト必須
+- 以前検証した「ページ遷移後に JS 実行不可」問題は pagination（複数ページ順次取得）で発生。投票フローは1ページ完結なので該当しない
