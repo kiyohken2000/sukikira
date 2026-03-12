@@ -446,7 +446,20 @@ export const vote = async (name, voteType) => {
         _votePageCache = { name: null, html: null }
       } else {
         _votePageCache = { name: null, html: null }
-        pageHtml = await get(`/people/vote/${encodedName}`)
+        // get() を使わず単発 fetch（vote() 自身がリトライを管理するため二重リトライを防止）
+        const voteRes = await fetch(`${BASE_URL}/people/vote/${encodedName}`, {
+          credentials: 'include',
+          headers: { ...BROWSER_HEADERS, 'User-Agent': getBrowserUA() },
+        })
+        if (!voteRes.ok) {
+          console.warn(`[vote] GET vote page failed: HTTP ${voteRes.status}, attempt ${attempt + 1}`)
+          continue
+        }
+        pageHtml = await voteRes.text()
+        if (!pageHtml || pageHtml.length === 0) {
+          console.warn(`[vote] GET vote page empty, attempt ${attempt + 1}`)
+          continue
+        }
       }
 
       // 結果ページが返った場合（既投票済み）
@@ -498,22 +511,26 @@ export const vote = async (name, voteType) => {
         return { resultInfo: parseResult(html), comments: cmts, nextCursor }
       }
 
-      // POSTレスポンスが空の場合
-      if (!html || html.length === 0) {
-        console.warn(`[vote] POST response empty, attempt ${attempt + 1}`)
-        continue // リトライ（トークン再取得からやり直し）
+      // POST送信済み → 投票はサーバーに届いている可能性が高い
+      // レスポンスが空でも再投票せず、結果ページの取得だけを試みる
+      console.warn(`[vote] POST sent but response ${html?.length ?? 0}bytes, fetching result...`)
+      for (let ri = 0; ri < MAX_RETRIES; ri++) {
+        await new Promise(r => setTimeout(r, 500 + ri * 300))
+        try {
+          const fallback = await getComments(name)
+          if (fallback.resultInfo) {
+            return fallback
+          }
+        } catch (e) {
+          console.warn(`[vote] result fetch retry ${ri + 1} failed: ${e.message}`)
+        }
       }
-
-      // POST成功したがresult以外のレスポンス → getComments で再取得
-      const fallback = await getComments(name)
-      if (fallback.resultInfo) {
-        return fallback
-      }
-
-      console.warn(`[vote] result not found after POST (${html?.length ?? 0}bytes), attempt ${attempt + 1}`)
-      continue // リトライ
+      // 結果取得できなくても投票は成功している可能性がある
+      throw new Error('投票は送信されましたが結果の取得に失敗しました。リロードしてください')
     } catch (e) {
-      // get() の Cloudflare ブロックエラーなど → リトライ
+      // 「投票は送信されました」エラーはそのまま上位に伝播（再投票しない）
+      if (e.message.includes('投票は送信されました')) throw e
+      // vote ページ取得失敗など → UA ローテーションしてリトライ
       if (attempt < MAX_RETRIES) {
         console.warn(`[vote] error on attempt ${attempt + 1}: ${e.message}`)
         continue
