@@ -83,6 +83,12 @@ logDefaultUA()
 
 const MAX_RETRIES = 8
 
+/** Cloudflare チャレンジ/ブロックページかどうかを判定 */
+// ※ cf-ray は全 CF プロキシページに含まれるので使わない
+const isCloudflareChallenge = (html) =>
+  !html || html.length === 0 ||
+  /<title>Just a moment\.\.\.<\/title>|challenge-platform|id="cf-challenge|id="challenge-running/i.test(html)
+
 /** GETリクエスト（空レスポンス時は UA ローテーション+最大 MAX_RETRIES 回リトライ） */
 const get = async (path) => {
   const url = `${BASE_URL}${path}`
@@ -273,10 +279,11 @@ const parseResult = (html) => {
  */
 export const getComments = async (name) => {
   const encodedName = encodeName(name)
-  const html = await get(`/people/result/${encodedName}?_t=${Date.now()}`)
+  const html = await get(`/people/result/${encodedName}`)
 
   // 存在しない人物: トップページにリダイレクトされた場合
-  if (html && !html.includes('/people/') && !html.includes('好き派')) {
+  // ※ Cloudflare チャレンジページを誤判定しないよう除外
+  if (html && !html.includes('/people/') && !html.includes('好き派') && !isCloudflareChallenge(html)) {
     return { resultInfo: null, comments: [], notFound: true }
   }
 
@@ -420,70 +427,102 @@ const parseComments = (html) => {
  */
 export const vote = async (name, voteType) => {
   const encodedName = encodeName(name)
-  let pageHtml = ''
 
-  // getComments がキャッシュした vote ページ HTML を優先的に使う
-  if (_votePageCache.name === name && _votePageCache.html && _votePageCache.html.length > 100) {
-    pageHtml = _votePageCache.html
-    _votePageCache = { name: null, html: null }
-  } else {
-    _votePageCache = { name: null, html: null }
-    pageHtml = await get(`/people/vote/${encodedName}?_t=${Date.now()}`)
+  // 投票全体（トークン取得→POST→結果確認）をリトライ
+  // Cloudflare がブロックした場合、UA をローテーションして再試行
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      console.warn(`[vote] attempt ${attempt + 1}/${MAX_RETRIES + 1} with new UA`)
+      rotateUA()
+      await new Promise(r => setTimeout(r, 300 + attempt * 200))
+    }
+
+    try {
+      let pageHtml = ''
+
+      // getComments がキャッシュした vote ページ HTML を優先的に使う（初回のみ）
+      if (attempt === 0 && _votePageCache.name === name && _votePageCache.html && _votePageCache.html.length > 100) {
+        pageHtml = _votePageCache.html
+        _votePageCache = { name: null, html: null }
+      } else {
+        _votePageCache = { name: null, html: null }
+        pageHtml = await get(`/people/vote/${encodedName}`)
+      }
+
+      // 結果ページが返った場合（既投票済み）
+      if (/好き派:/.test(pageHtml)) {
+        const cmts = parseComments(pageHtml)
+        const nextCursor = cmts.length >= 20 ? parseNextCursor(pageHtml) : null
+        return { resultInfo: parseResult(pageHtml), comments: cmts, nextCursor }
+      }
+
+      const { id, auth1, auth2, authR } = parseVoteTokens(pageHtml)
+
+      if (!id || !auth1 || !auth2 || !authR) {
+        console.warn(`[vote] token parse failed (html=${pageHtml?.length ?? 0}bytes), attempt ${attempt + 1}`)
+        continue // リトライ
+      }
+
+      // 投票POST
+      const body = new URLSearchParams({
+        vote: voteType === 'like' ? '1' : '0',
+        ok: 'ng',
+        id,
+        auth1,
+        auth2,
+        'auth-r': authR,
+      }).toString()
+
+      const res = await fetch(`${BASE_URL}/people/result/${encodedName}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          ...BROWSER_HEADERS,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': getBrowserUA(),
+          Origin: BASE_URL,
+          Referer: `${BASE_URL}/people/vote/${encodedName}`,
+        },
+        body,
+      })
+      if (!res.ok) {
+        console.warn(`[vote] POST failed: HTTP ${res.status}, attempt ${attempt + 1}`)
+        continue // リトライ
+      }
+      const html = await res.text()
+
+      // POSTレスポンスに結果が含まれていればそのまま返す
+      if (html && /好き派:/.test(html)) {
+        const cmts = parseComments(html)
+        const nextCursor = cmts.length >= 20 ? parseNextCursor(html) : null
+        return { resultInfo: parseResult(html), comments: cmts, nextCursor }
+      }
+
+      // POSTレスポンスが空の場合
+      if (!html || html.length === 0) {
+        console.warn(`[vote] POST response empty, attempt ${attempt + 1}`)
+        continue // リトライ（トークン再取得からやり直し）
+      }
+
+      // POST成功したがresult以外のレスポンス → getComments で再取得
+      const fallback = await getComments(name)
+      if (fallback.resultInfo) {
+        return fallback
+      }
+
+      console.warn(`[vote] result not found after POST (${html?.length ?? 0}bytes), attempt ${attempt + 1}`)
+      continue // リトライ
+    } catch (e) {
+      // get() の Cloudflare ブロックエラーなど → リトライ
+      if (attempt < MAX_RETRIES) {
+        console.warn(`[vote] error on attempt ${attempt + 1}: ${e.message}`)
+        continue
+      }
+      throw e
+    }
   }
 
-  // 結果ページが返った場合（既投票済み）
-  if (/好き派:/.test(pageHtml)) {
-    const cmts = parseComments(pageHtml)
-    const nextCursor = cmts.length >= 20 ? parseNextCursor(pageHtml) : null
-    return { resultInfo: parseResult(pageHtml), comments: cmts, nextCursor }
-  }
-
-  const { id, auth1, auth2, authR } = parseVoteTokens(pageHtml)
-
-  if (!id || !auth1 || !auth2 || !authR) {
-    throw new Error(`投票トークンの取得に失敗しました (html=${pageHtml?.length ?? 0}bytes, ua=${SESSION_UA.slice(0, 30)})`)
-  }
-
-  // 投票POST
-  const body = new URLSearchParams({
-    vote: voteType === 'like' ? '1' : '0',
-    ok: 'ng',
-    id,
-    auth1,
-    auth2,
-    'auth-r': authR,
-  }).toString()
-
-  const res = await fetch(`${BASE_URL}/people/result/${encodedName}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      ...BROWSER_HEADERS,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': getBrowserUA(),
-      Origin: BASE_URL,
-      Referer: `${BASE_URL}/people/vote/${encodedName}`,
-    },
-    body,
-  })
-  if (!res.ok) throw new Error(`投票POST失敗: HTTP ${res.status}`)
-  const html = await res.text()
-
-  // POSTレスポンスに結果が含まれていればそのまま返す
-  if (html && /好き派:/.test(html)) {
-    const cmts = parseComments(html)
-    const nextCursor = cmts.length >= 20 ? parseNextCursor(html) : null
-    return { resultInfo: parseResult(html), comments: cmts, nextCursor }
-  }
-
-  // POSTレスポンスが空の場合、getComments で結果を再取得
-  const fallback = await getComments(name)
-  if (fallback.resultInfo) {
-    return fallback
-  }
-
-  console.warn('[vote] result not found. POST html:', html?.length)
-  throw new Error(`投票結果の取得に失敗 (post=${html?.length ?? 0}bytes)`)
+  throw new Error(`投票失敗: ${MAX_RETRIES + 1}回試行, 全UA失敗`)
 }
 
 // -----------------------------------------------------------------------
