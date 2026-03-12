@@ -403,38 +403,319 @@ TLS ブロック時もレスポンスは UA ブロックと同じ（200 + 空ボ
 
 ### 背景
 
-BROWSER_HEADERS + UA ローテーション + リトライを実装しても、0bytes エラーが再発する。
-根本原因は未確定だが、React Native の `fetch` が Cloudflare のボットスコアリングでブロックされることがある。
+UA ローテーション + リトライで投票できているが、Cloudflare/サーバー側の変更で繰り返しブロックされている（事例1〜5）。次にリトライ方式で対処不可能な問題が発生した場合、WebView 方式に切り替える。
 
-再起動で直ることがある挙動から、TLS フィンガープリント単独では原因を説明できない（TLS は再起動で変わらないため）。UA の当たり外れ、Cloudflare 側のスコアリング揺らぎ、または未特定の要素が関与している可能性がある。
+WebView は実ブラウザエンジン（iOS: WKWebView / Android: Chromium WebView）を使うため、Cloudflare が判定に使うあらゆるシグナル（UA、ヘッダー、TLS、クッキー、JS 実行能力）が本物のブラウザと一致する。根本原因が何であっても WebView 方式なら回避できる。
 
-いずれにせよ、WebView は実ブラウザエンジンを使うため、Cloudflare が判定に使うあらゆるシグナル（UA、ヘッダー、TLS、クッキー、JS 実行能力）が本物のブラウザと一致する。根本原因が何であっても WebView 方式なら回避できる。
+### 適用範囲
 
-### 方針: WebView で投票フローを完結させる
+**投票フロー（`vote()`）のみ**。読み取り系（ランキング、コメント表示）は現行の `get()` + リトライで十分。
 
-`react-native-webview` は実ブラウザエンジン（iOS: WKWebView / Android: Chromium WebView）を使うため、TLS フィンガープリントも本物のブラウザと一致する。投票フローを WebView 内で完結させることで Cloudflare を根本的に回避する。
+理由:
+- Cloudflare に頻繁にブロックされるのは `/people/vote/` と `/people/result/` への POST
+- 全通信を WebView にすると、無限スクロール等の頻繁な通信すべてに WebView のオーバーヘッドがかかる
+- 投票は「1回成功すればいい」操作なので遅延が許容しやすい
 
-### 実装手順
+### アーキテクチャ
 
-1. **非表示の WebView** を投票時にマウントする（`style={{ height: 0, width: 0, opacity: 0 }}`）
-2. WebView の `source` に `/people/vote/{name}` を設定してロード
-3. `injectedJavaScript` でトークン（`id`, `auth1`, `auth2`, `auth-r`）を抽出し、`window.ReactNativeWebView.postMessage(JSON.stringify(tokens))` で RN に送信
-4. RN 側の `onMessage` でトークンを受信後、WebView に投票フォーム submit を実行する JS を inject
-5. submit 後の結果ページ HTML を再度 `postMessage` で返す
-6. RN 側で結果 HTML を parseResult / parseComments して UI に反映
-7. 投票完了後に WebView をアンマウント
+```
+[Details.js]
+  ├─ onVote('like') 押下
+  │
+  ├─ 現行: vote(name, 'like')  ← sukikira.js の RN fetch 方式
+  │
+  └─ 新方式: webViewVote(name, 'like')  ← WebView 方式
+       │
+       ├─ <VoteWebView> をマウント（非表示）
+       ├─ vote ページロード → injectedJS でトークン抽出 → postMessage
+       ├─ RN で受信 → injectJavaScript で XHR POST 実行
+       ├─ 結果 HTML を postMessage → RN で parseResult/parseComments
+       └─ resolve({ resultInfo, comments, nextCursor })
+```
 
-### ポイント
+### ファイル構成
 
-- **初期ロードは成功する**（2026-02-28 検証で確認済み）。投票は1回のロード + 1回の submit で完結するため、「ページ遷移後に JS 実行不可」問題には該当しない
-- フォーム submit は `XMLHttpRequest` か `fetch` を WebView 内から実行する方式（ページ遷移ではなく XHR）にすればナビゲーションなしで完結
-- WebView 内の fetch は実ブラウザの TLS + クッキーを使うため、Cloudflare のボットスコアが低くなる
-- WebView のクッキーは WKWebView / Chromium のクッキーストアに保存され、`credentials: 'include'` の RN fetch とは独立
-- 既存の `get()` によるフォールバック（RN fetch 方式）は残しておき、WebView がタイムアウトした場合の代替とする
+```
+apps/mobile/src/
+  components/
+    VoteWebView.js     ← 新規: 非表示 WebView コンポーネント
+  utils/
+    sukikira.js        ← 既存: vote() は残す（フォールバック用）
+    webViewVote.js     ← 新規: WebView 投票の Promise ラッパー
+  scenes/details/
+    Details.js         ← 変更: onVote で webViewVote → vote フォールバック
+```
+
+### 1. VoteWebView.js — 非表示 WebView コンポーネント
+
+```jsx
+// apps/mobile/src/components/VoteWebView.js
+import React, { useRef, useEffect } from 'react'
+import { WebView } from 'react-native-webview'
+
+const TIMEOUT_MS = 15000
+
+// vote ページロード後にトークンを抽出して postMessage する JS
+const EXTRACT_TOKENS_JS = `
+(function() {
+  // 既投票済み（result ページ）の場合
+  if (document.body.innerHTML.includes('好き派:')) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'result',
+      html: document.documentElement.outerHTML,
+    }));
+    return;
+  }
+  // vote ページ → トークン抽出
+  var getId = function(n) {
+    var el = document.querySelector('input[name="' + n + '"]');
+    return el ? el.value : null;
+  };
+  window.ReactNativeWebView.postMessage(JSON.stringify({
+    type: 'tokens',
+    id: getId('id'),
+    auth1: getId('auth1'),
+    auth2: getId('auth2'),
+    authR: getId('auth-r'),
+  }));
+})();
+true;
+`
+
+// トークンを使って XHR で投票 POST する JS を生成
+const makePostJS = (encodedName, voteType, tokens) => `
+(function() {
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/people/result/${encodedName}', true);
+  xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  xhr.onload = function() {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'postResult',
+      html: xhr.responseText,
+      status: xhr.status,
+    }));
+  };
+  xhr.onerror = function() {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'postError',
+      message: 'XHR error',
+    }));
+  };
+  var params = 'vote=${voteType === 'like' ? '1' : '0'}'
+    + '&ok=ng'
+    + '&id=${tokens.id}'
+    + '&auth1=${tokens.auth1}'
+    + '&auth2=${tokens.auth2}'
+    + '&auth-r=${tokens.authR}';
+  xhr.send(params);
+})();
+true;
+`
+
+/**
+ * @param {object} props
+ * @param {string} props.name - 人物名（デコード済み）
+ * @param {'like'|'dislike'} props.voteType
+ * @param {(result: {type: string, html?: string, error?: string}) => void} props.onComplete
+ * @param {() => void} props.onTimeout
+ */
+const VoteWebView = ({ name, voteType, onComplete, onTimeout }) => {
+  const webViewRef = useRef(null)
+  const timerRef = useRef(null)
+  const encodedName = encodeURIComponent(name)
+    .replace(/\(/g, '%28').replace(/\)/g, '%29')
+
+  useEffect(() => {
+    timerRef.current = setTimeout(() => {
+      onTimeout()
+    }, TIMEOUT_MS)
+    return () => clearTimeout(timerRef.current)
+  }, [])
+
+  const handleMessage = (event) => {
+    const data = JSON.parse(event.nativeEvent.data)
+
+    if (data.type === 'result') {
+      // 既投票済み → そのまま返す
+      clearTimeout(timerRef.current)
+      onComplete(data)
+    } else if (data.type === 'tokens') {
+      // トークン取得成功 → XHR で POST
+      if (!data.id || !data.auth1 || !data.auth2 || !data.authR) {
+        clearTimeout(timerRef.current)
+        onComplete({ type: 'error', error: 'token parse failed' })
+        return
+      }
+      const js = makePostJS(encodedName, voteType, data)
+      webViewRef.current?.injectJavaScript(js)
+    } else if (data.type === 'postResult') {
+      // POST 完了 → 結果 HTML を返す
+      clearTimeout(timerRef.current)
+      onComplete(data)
+    } else if (data.type === 'postError') {
+      clearTimeout(timerRef.current)
+      onComplete({ type: 'error', error: data.message })
+    }
+  }
+
+  return (
+    <WebView
+      ref={webViewRef}
+      source={{ uri: `https://suki-kira.com/people/vote/${encodedName}` }}
+      injectedJavaScript={EXTRACT_TOKENS_JS}
+      onMessage={handleMessage}
+      style={{ height: 0, width: 0, opacity: 0, position: 'absolute' }}
+      // JS チャレンジ通過のため javaScriptEnabled は必須（デフォルト true）
+      javaScriptEnabled={true}
+    />
+  )
+}
+
+export default VoteWebView
+```
+
+### 2. webViewVote.js — Promise ラッパー
+
+```javascript
+// apps/mobile/src/utils/webViewVote.js
+//
+// VoteWebView の結果を Promise で返すためのイベントバス。
+// Details.js が VoteWebView をレンダーし、結果をこのモジュール経由で resolve する。
+//
+// 使い方:
+//   const promise = createVotePromise()
+//   // → VoteWebView をマウント（onComplete で resolveVote を呼ぶ）
+//   const result = await promise
+
+let _resolve = null
+let _reject = null
+
+export const createVotePromise = () => {
+  return new Promise((resolve, reject) => {
+    _resolve = resolve
+    _reject = reject
+  })
+}
+
+export const resolveVote = (result) => {
+  if (_resolve) {
+    _resolve(result)
+    _resolve = null
+    _reject = null
+  }
+}
+
+export const rejectVote = (error) => {
+  if (_reject) {
+    _reject(error)
+    _resolve = null
+    _reject = null
+  }
+}
+```
+
+### 3. Details.js — 統合
+
+```javascript
+// Details.js の onVote を以下のように変更:
+
+import VoteWebView from '../../../components/VoteWebView'
+import { parseResult, parseComments } from '../../../utils/sukikira'
+// ↑ parseResult, parseComments を sukikira.js から export する必要あり
+
+const [webViewVote, setWebViewVote] = useState(null)
+// webViewVote = { name, voteType } or null（マウント制御用）
+
+const onVote = async (type) => {
+  if (voteStatus) return
+  setVoting(true)
+  try {
+    // --- WebView 方式 ---
+    const result = await new Promise((resolve, reject) => {
+      // VoteWebView マウント用 state をセット
+      setWebViewVote({
+        name,
+        voteType: type,
+        onComplete: (data) => {
+          setWebViewVote(null) // アンマウント
+          resolve(data)
+        },
+        onTimeout: () => {
+          setWebViewVote(null) // アンマウント
+          reject(new Error('WebView timeout'))
+        },
+      })
+    })
+
+    if (result.type === 'error') {
+      throw new Error(result.error)
+    }
+
+    // result.html から parseResult / parseComments
+    if (result.html && /好き派:/.test(result.html)) {
+      const info = parseResult(result.html)
+      const cmts = parseComments(result.html)
+      setResultInfo(info)
+      setComments(cmts)
+      // ... 以降は現行の onVote 成功時と同じ処理
+    }
+  } catch (e) {
+    // --- WebView 失敗時: 現行の RN fetch 方式にフォールバック ---
+    console.warn('[Details] WebView vote failed, falling back to fetch:', e.message)
+    try {
+      const { resultInfo: info, comments: cmts, nextCursor: cursor } = await vote(name, type)
+      // ... 現行の成功処理
+    } catch (fetchErr) {
+      // 両方失敗
+      Alert.alert('エラー', `投票に失敗しました: ${fetchErr.message}`)
+    }
+  } finally {
+    setVoting(false)
+  }
+}
+
+// render 内に追加（return の中、任意の場所）:
+{webViewVote && (
+  <VoteWebView
+    name={webViewVote.name}
+    voteType={webViewVote.voteType}
+    onComplete={webViewVote.onComplete}
+    onTimeout={webViewVote.onTimeout}
+  />
+)}
+```
+
+### 4. sukikira.js — export 追加
+
+`parseResult` と `parseComments` を Details.js から使えるよう export する:
+
+```javascript
+// 現行: const parseResult = (html) => { ... }
+// 変更: export const parseResult = (html) => { ... }
+//
+// 現行: const parseComments = (html) => { ... }
+// 変更: export const parseComments = (html) => { ... }
+```
+
+### 既存コードとの関係
+
+| 関数/ファイル | 変更内容 |
+|---|---|
+| `sukikira.js` の `vote()` | **変更なし**。フォールバック用にそのまま残す |
+| `sukikira.js` の `parseResult` / `parseComments` | `export` を追加 |
+| `Details.js` の `onVote` | WebView 方式を先に試行し、失敗時に `vote()` にフォールバック |
+| `VoteWebView.js` | 新規作成 |
+| `webViewVote.js` | 新規作成（不要になる可能性あり。Details.js 内で Promise を作る方式なら不要） |
+
+### 検証済み事項（2026-02-28）
+
+- WebView での初期ロードは成功する
+- 投票は1回のロード + 1回の XHR POST で完結するため、「ページ遷移後に JS 実行不可」問題には該当しない
+- `react-native-webview` は既にインストール済み（`WebViewTest.js` で使用中）
 
 ### 注意点
 
-- WebView のマウント/アンマウントにはレンダリングコストがある → 投票ボタン押下時のみマウント
-- WebView 内の JS が `postMessage` を返す前にタイムアウトした場合のハンドリングが必要
-- Android と iOS で WebView のクッキー挙動が異なる場合がある → 両プラットフォームでテスト必須
-- 以前検証した「ページ遷移後に JS 実行不可」問題は pagination（複数ページ順次取得）で発生。投票フローは1ページ完結なので該当しない
+- `makePostJS` 内のテンプレートリテラルで `tokens` の値を直接埋め込むため、XSS に注意。トークン値は英数字のみなので通常は問題ないが、念のためエスケープを検討
+- タイムアウト（15秒）は Cloudflare の JS チャレンジ通過時間を考慮。チャレンジが5秒程度かかることがある
+- WebView マウント中に画面遷移した場合の cleanup を useEffect の return で行うこと
+- Android と iOS で WebView のクッキー挙動が異なる可能性 → 両プラットフォームでテスト必須
