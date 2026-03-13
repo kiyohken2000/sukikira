@@ -719,3 +719,48 @@ const onVote = async (type) => {
 - タイムアウト（15秒）は Cloudflare の JS チャレンジ通過時間を考慮。チャレンジが5秒程度かかることがある
 - WebView マウント中に画面遷移した場合の cleanup を useEffect の return で行うこと
 - Android と iOS で WebView のクッキー挙動が異なる可能性 → 両プラットフォームでテスト必須
+
+---
+
+## 2026-03-14 追記: WebView 先行フォールバックの検証結果（不採用）
+
+### 目的
+- 投票済み人物の詳細表示で空ボディが連続する問題を回避するため、
+  Details 画面の読み込みを「WebView 先行 → 失敗時 fetch」に切り替えた。
+- 投票も「WebView 先行 → 失敗時 fetch」に変更して試験。
+
+### 実装方針（検証版）
+- Details 読み込み:
+  - WebView で `/people/result/{name}` を取得
+  - 結果HTMLをパースして UI 更新
+  - 失敗時に fetch + UA ローテーションへフォールバック
+  - WebView が vote ページを返した場合はキャッシュ表示（stale）に切り替え
+- 投票:
+  - WebView で vote ページ取得 → XHR POST
+  - 失敗時に従来の fetch 投票へフォールバック
+
+### 観測された問題
+- WebView が `about:srcdoc` を外部で開こうとして警告が出ることがあり、ローディングが止まるケースがあった
+  - `originWhitelist` に `about:*` を追加し回避
+- WebView が「短いHTML（例: 39 bytes）」を返すことがあり、結果ページとして扱えない
+  - HTML 長さが短い場合は再試行するロジックを追加
+- WebView が結果HTMLを返してもタイムアウトが発火するケースがあり、再試行や fetch フォールバックが走って遅くなる
+- WebView が結果ではなく vote ページを返すケースがあり、stale 表示になる
+- 開閉を繰り返すとローディングが止まることがあり、早期タイムアウト＋watchdogで緩和したが完全解消はできなかった
+
+### 結論
+- WebView 先行は安定性が低く、結果的に fetch リトライと体感が大きく変わらなかった。
+- 本番への適用は見送る。
+
+### ノウハウ（参考として残す）
+- WebView での取得は「短すぎるHTMLは無効」として再試行すること
+- `about:srcdoc` 警告が出た場合は `originWhitelist` へ `about:*` を追加すること
+- WebView が vote ページを返す場合があるため、vote ページ判定を先に行うこと
+- WebView はタイムアウトや二重完了が起きやすいので、完了フラグで二重処理を防止すること
+- WebView を 0x0 サイズ（`width/height: 0`）にすると、OS の最適化で読み込みや JS 実行が不安定になる可能性がある。
+  - 代替: `width: 1, height: 1, opacity: 0, position: 'absolute'` で画面内に置く
+
+### パッチ
+- 検証用の差分パッチ: `patches/webview-fallback-experiment.patch`
+- 適用: `git -c safe.directory=C:/Users/all/develop/expo/sukikira apply patches/webview-fallback-experiment.patch`
+- 破棄（元に戻す）: `git -c safe.directory=C:/Users/all/develop/expo/sukikira apply -R patches/webview-fallback-experiment.patch`
